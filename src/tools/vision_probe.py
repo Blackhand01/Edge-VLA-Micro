@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 
-from vision_module import VisionModule
+from src.perception.vision_module import VisionModule
 
 
 def build_parser() -> argparse.ArgumentParser:

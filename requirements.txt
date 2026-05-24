@@ -9,3 +9,4 @@ torch>=2.5,<3
 torchvision>=0.20,<1
 pandas>=2.2,<3
 matplotlib>=3.9,<4
+pillow>=10,<13

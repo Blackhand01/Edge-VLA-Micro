@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import math
 from pathlib import Path
+from statistics import mean
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
-import pandas as pd
+from PIL import Image, ImageDraw, ImageFont
 
 
 LATENCY_COLUMNS = ("audio_ms", "vision_ms", "ttft_ms", "decode_time_ms", "safety_ms")
@@ -20,6 +18,12 @@ PIE_LABELS = (
     "VLM Decode",
     "Safety Guardrail",
 )
+COLORS = ("#4cc9f0", "#80ed99", "#f72585", "#f9c74f", "#adb5bd")
+BACKGROUND = "#10141c"
+FOREGROUND = "#e8edf2"
+MUTED = "#9aa6b2"
+GRID = "#343b49"
+ACCENT = "#f72585"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,167 +35,167 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def load_performance_csv(path: Path) -> pd.DataFrame:
+def load_performance_csv(path: Path) -> list[dict[str, float]]:
     if not path.exists():
         raise FileNotFoundError(f"Performance CSV not found: {path}")
 
-    df = pd.read_csv(path, on_bad_lines="skip")
-    if df.empty:
+    rows: list[dict[str, float]] = []
+    skipped_rows = 0
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise ValueError(f"Performance CSV has no header: {path}")
+        missing_columns = [column for column in REQUIRED_COLUMNS if column not in reader.fieldnames]
+        if missing_columns:
+            raise ValueError(f"Performance CSV missing required columns: {', '.join(missing_columns)}")
+        for row in reader:
+            try:
+                rows.append({column: float(row[column]) for column in REQUIRED_COLUMNS})
+            except (KeyError, TypeError, ValueError):
+                skipped_rows += 1
+
+    if not rows:
         raise ValueError(f"Performance CSV has no usable rows: {path}")
-
-    missing_columns = [column for column in REQUIRED_COLUMNS if column not in df.columns]
-    if missing_columns:
-        raise ValueError(f"Performance CSV missing required columns: {', '.join(missing_columns)}")
-
-    for column in REQUIRED_COLUMNS:
-        df[column] = pd.to_numeric(df[column], errors="coerce")
-
-    clean_df = df.dropna(subset=REQUIRED_COLUMNS).reset_index(drop=True)
-    if clean_df.empty:
-        raise ValueError(f"Performance CSV has no rows with valid numeric metrics: {path}")
-
-    skipped_rows = len(df) - len(clean_df)
     if skipped_rows:
         print(f"Skipped {skipped_rows} malformed telemetry rows.")
-
-    return clean_df
-
-
-def calculate_latency_means(df: pd.DataFrame) -> pd.Series:
-    return df.loc[:, LATENCY_COLUMNS].mean()
+    return rows
 
 
-def generate_latency_pie_chart(means: pd.Series, output_path: Path) -> None:
-    values = [
-        float(means["audio_ms"]),
-        float(means["vision_ms"]),
-        float(means["ttft_ms"]),
-        float(means["decode_time_ms"]),
-        float(means["safety_ms"]),
-    ]
-    positive_items = [(label, value) for label, value in zip(PIE_LABELS, values) if value > 0.0]
-    if not positive_items:
+def font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = (
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+    )
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size=size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def draw_text(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[float, float],
+    value: str,
+    *,
+    size: int,
+    fill: str = FOREGROUND,
+    bold: bool = False,
+    anchor: str | None = None,
+) -> None:
+    draw.text(xy, value, font=font(size, bold=bold), fill=fill, anchor=anchor)
+
+
+def calculate_latency_means(rows: list[dict[str, float]]) -> dict[str, float]:
+    return {column: mean(row[column] for row in rows) for column in LATENCY_COLUMNS}
+
+
+def generate_latency_pie_chart(means: dict[str, float], output_path: Path, runs_analyzed: int) -> None:
+    values = [float(means[column]) for column in LATENCY_COLUMNS]
+    total_latency = sum(values)
+    if total_latency <= 0.0:
         raise ValueError("No positive latency values found for latency pie chart.")
 
-    labels = [item[0] for item in positive_items]
-    sizes = [item[1] for item in positive_items]
-    total_latency = sum(sizes)
-    asr_ttft_total = float(means["audio_ms"] + means["ttft_ms"])
-    bottleneck_pct = (asr_ttft_total / total_latency * 100.0) if total_latency > 0 else 0.0
-    explode = [0.075 if label in {"ASR (Whisper)", "VLM TTFT (Prompt Eval)"} else 0.015 for label in labels]
-    colors = ["#4cc9f0", "#80ed99", "#f72585", "#f9c74f", "#adb5bd"]
-
-    plt.style.use("dark_background")
-    fig, ax = plt.subplots(figsize=(10, 7), dpi=180)
-    fig.patch.set_facecolor("#10141c")
-    ax.set_facecolor("#10141c")
-
-    wedges, _, autotexts = ax.pie(
-        sizes,
-        labels=labels,
-        colors=colors[: len(labels)],
-        explode=explode,
-        autopct=lambda pct: f"{pct:.1f}%" if pct >= 2.0 else "",
-        pctdistance=0.74,
-        labeldistance=1.13,
-        startangle=105,
-        counterclock=False,
-        wedgeprops={"linewidth": 1.2, "edgecolor": "#10141c"},
-        textprops={"color": "#e8edf2", "fontsize": 9},
+    bottleneck_pct = float((means["audio_ms"] + means["ttft_ms"]) / total_latency * 100.0)
+    image = Image.new("RGB", (1800, 1260), BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    draw_text(draw, (90, 70), "Average Control-Loop Latency Breakdown", size=48, bold=True)
+    draw_text(
+        draw,
+        (90, 130),
+        f"{runs_analyzed} runs | ASR + VLM TTFT bottleneck: {bottleneck_pct:.1f}% of profiled latency",
+        size=28,
+        fill="#f9c74f",
+        bold=True,
     )
 
-    for autotext in autotexts:
-        autotext.set_fontsize(9)
-        autotext.set_fontweight("bold")
+    pie_box = (170, 240, 1030, 1100)
+    center = (600, 670)
+    start_angle = -90.0
+    for label, value, color in zip(PIE_LABELS, values, COLORS):
+        extent = value / total_latency * 360.0
+        end_angle = start_angle + extent
+        draw.pieslice(pie_box, start=start_angle, end=end_angle, fill=color, outline=BACKGROUND, width=3)
+        mid_angle = math.radians(start_angle + extent / 2.0)
+        pct = value / total_latency * 100.0
+        if pct >= 2.0:
+            x = center[0] + math.cos(mid_angle) * 265
+            y = center[1] + math.sin(mid_angle) * 265
+            draw_text(draw, (x, y), f"{pct:.1f}%", size=26, fill=BACKGROUND, bold=True, anchor="mm")
+        start_angle = end_angle
 
-    ax.set_title("Average Control-Loop Latency Breakdown", fontsize=14, fontweight="bold", pad=18)
-    ax.text(
-        0.5,
-        -0.08,
-        f"Primary bottleneck: ASR + VLM TTFT = {bottleneck_pct:.1f}% of average cycle latency",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        color="#f72585" if bottleneck_pct >= 80.0 else "#f9c74f",
-        fontsize=10,
-        fontweight="bold",
+    legend_x = 1110
+    for index, (label, value, color) in enumerate(zip(PIE_LABELS, values, COLORS)):
+        y = 270 + index * 130
+        pct = value / total_latency * 100.0
+        draw.rounded_rectangle((legend_x, y, legend_x + 38, y + 38), radius=5, fill=color)
+        draw_text(draw, (legend_x + 60, y - 2), label, size=30, bold=True)
+        draw_text(draw, (legend_x + 60, y + 42), f"{value:,.0f} ms average | {pct:.1f}%", size=25, fill=MUTED)
+
+    draw_text(draw, (1110, 990), "Interpretation", size=32, bold=True)
+    draw_text(draw, (1110, 1040), "The dominant latency is front-loaded in speech recognition", size=24, fill=MUTED)
+    draw_text(draw, (1110, 1075), "and VLM TTFT, supporting the TensorRT/INT8 roadmap.", size=24, fill=MUTED)
+    image.save(output_path, quality=95)
+
+
+def generate_tps_bar_chart(rows: list[dict[str, float]], output_path: Path) -> None:
+    tps = [row["tps"] for row in rows]
+    avg_tps = sum(tps) / len(tps)
+    image = Image.new("RGB", (1900, 1150), BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    draw_text(draw, (90, 70), "VLM Decode Throughput per Inference Run", size=48, bold=True)
+    draw_text(
+        draw,
+        (90, 130),
+        f"Mean decode throughput: {avg_tps:.1f} TPS | Edge UMA baseline before TensorRT acceleration",
+        size=28,
+        fill="#f9c74f",
+        bold=True,
     )
-    ax.legend(
-        wedges,
-        [f"{label}: {value:.0f} ms" for label, value in zip(labels, sizes)],
-        title="Mean latency",
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
-        frameon=False,
-        fontsize=9,
-        title_fontsize=10,
-    )
-    fig.tight_layout(rect=(0.0, 0.04, 0.86, 1.0))
-    fig.savefig(output_path, facecolor=fig.get_facecolor(), bbox_inches="tight")
-    plt.close(fig)
+
+    left, top, right, bottom = 130, 230, 1780, 940
+    max_y = max(max(tps) * 1.18, avg_tps * 1.25, 1.0)
+    for tick in range(0, int(max_y // 10 + 2) * 10, 10):
+        y = bottom - (tick / max_y) * (bottom - top)
+        draw.line((left, y, right, y), fill=GRID, width=1)
+        draw_text(draw, (left - 18, y), str(tick), size=22, fill=MUTED, anchor="rm")
+
+    draw.line((left, top, left, bottom), fill=FOREGROUND, width=2)
+    draw.line((left, bottom, right, bottom), fill=FOREGROUND, width=2)
+    bar_gap = 10
+    bar_width = max(18, ((right - left) - bar_gap * (len(tps) - 1)) / len(tps))
+    for index, value in enumerate(tps):
+        x0 = left + index * (bar_width + bar_gap)
+        x1 = x0 + bar_width
+        y = bottom - (value / max_y) * (bottom - top)
+        draw.rounded_rectangle((x0, y, x1, bottom), radius=5, fill="#4cc9f0", outline="#dce7ef", width=1)
+        draw_text(draw, ((x0 + x1) / 2.0, y - 12), f"{value:.1f}", size=18, anchor="mb")
+        draw_text(draw, ((x0 + x1) / 2.0, bottom + 28), str(index + 1), size=18, fill=MUTED, anchor="mm")
+
+    avg_y = bottom - (avg_tps / max_y) * (bottom - top)
+    dash_x = left
+    while dash_x < right:
+        draw.line((dash_x, avg_y, min(dash_x + 22, right), avg_y), fill=ACCENT, width=4)
+        dash_x += 44
+    draw_text(draw, (right - 10, avg_y - 18), f"Mean: {avg_tps:.1f} TPS", size=28, fill=ACCENT, bold=True, anchor="rb")
+    draw_text(draw, ((left + right) / 2.0, 1030), "Run ID", size=26, bold=True, anchor="mm")
+    draw_text(draw, (40, (top + bottom) / 2.0), "TPS", size=26, bold=True, anchor="mm")
+    image.save(output_path, quality=95)
 
 
-def generate_tps_bar_chart(df: pd.DataFrame, output_path: Path) -> None:
-    tps = df["tps"].astype(float).reset_index(drop=True)
-    run_ids = list(range(1, len(tps) + 1))
-    avg_tps = float(tps.mean()) if len(tps) else 0.0
-
-    plt.style.use("dark_background")
-    fig_width = max(10.0, min(22.0, 0.42 * len(tps) + 5.0))
-    fig, ax = plt.subplots(figsize=(fig_width, 6.5), dpi=180)
-    fig.patch.set_facecolor("#10141c")
-    ax.set_facecolor("#10141c")
-
-    bars = ax.bar(
-        run_ids,
-        tps,
-        width=0.72,
-        color="#4cc9f0",
-        edgecolor="#dce7ef",
-        linewidth=0.6,
-        label="Measured edge VLM TPS",
-    )
-    ax.axhline(
-        avg_tps,
-        color="#f72585",
-        linestyle="--",
-        linewidth=1.8,
-        label=f"Mean TPS: {avg_tps:.1f}",
-    )
-    ax.set_title("VLM Decode Throughput per Inference Run", fontsize=14, fontweight="bold", pad=14)
-    ax.set_xlabel("Run ID", fontsize=10)
-    ax.set_ylabel("Tokens Per Second (TPS)", fontsize=10)
-    ax.set_ylim(0.0, max(float(tps.max()) * 1.18, avg_tps * 1.25, 1.0))
-    ax.grid(axis="y", color="#3a4150", alpha=0.55, linewidth=0.7)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.legend(frameon=False, loc="upper right")
-
-    if len(run_ids) <= 30:
-        ax.set_xticks(run_ids)
-    else:
-        step = max(1, len(run_ids) // 20)
-        ax.set_xticks(run_ids[::step])
-
-    ax.bar_label(bars, labels=[f"{value:.1f}" for value in tps], padding=3, fontsize=7)
-    fig.tight_layout()
-    fig.savefig(output_path, facecolor=fig.get_facecolor(), bbox_inches="tight")
-    plt.close(fig)
-
-
-def print_markdown_report(df: pd.DataFrame, means: pd.Series) -> None:
-    avg_tps = float(df["tps"].mean())
-    avg_total = float(means.sum())
+def print_markdown_report(rows: list[dict[str, float]], means: dict[str, float]) -> None:
+    avg_tps = mean(row["tps"] for row in rows)
+    avg_total = sum(means.values())
     asr_ttft_pct = float((means["audio_ms"] + means["ttft_ms"]) / avg_total * 100.0) if avg_total > 0 else 0.0
-
     print("\n## Edge-VLA Latency Analytics\n")
-    print(f"- Runs analyzed: {len(df)}")
+    print(f"- Runs analyzed: {len(rows)}")
     print(f"- Mean ASR (Whisper): {means['audio_ms']:.1f} ms")
     print(f"- Mean Vision Capture: {means['vision_ms']:.1f} ms")
     print(f"- Mean VLM TTFT (Prompt Eval): {means['ttft_ms']:.1f} ms")
     print(f"- Mean VLM Decode: {means['decode_time_ms']:.1f} ms")
     print(f"- Mean Safety Guardrail: {means['safety_ms']:.1f} ms")
-    print(f"- Mean measured cycle latency: {avg_total:.1f} ms")
+    print(f"- Mean measured profiled latency: {avg_total:.1f} ms")
     print(f"- Mean decode throughput: {avg_tps:.1f} TPS")
     print(f"- ASR + TTFT bottleneck share: {asr_ttft_pct:.1f}%")
     print("\nGenerated artifacts:")
@@ -201,15 +205,13 @@ def print_markdown_report(df: pd.DataFrame, means: pd.Series) -> None:
 
 def main() -> int:
     args = build_parser().parse_args()
-    input_path = Path(args.input)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    df = load_performance_csv(input_path)
-    means = calculate_latency_means(df)
-    generate_latency_pie_chart(means, output_dir / "latency_pie_chart.png")
-    generate_tps_bar_chart(df, output_dir / "tps_bar_chart.png")
-    print_markdown_report(df, means)
+    rows = load_performance_csv(Path(args.input))
+    means = calculate_latency_means(rows)
+    generate_latency_pie_chart(means, output_dir / "latency_pie_chart.png", len(rows))
+    generate_tps_bar_chart(rows, output_dir / "tps_bar_chart.png")
+    print_markdown_report(rows, means)
     return 0
 
 

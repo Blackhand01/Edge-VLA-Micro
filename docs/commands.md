@@ -27,14 +27,14 @@ Wait until QGroundControl shows the vehicle.
 Before the demo, verify that camera index 1 is the correct camera:
 
 ```bash
-/tmp/edge-vla-live-venv/bin/python vision_probe.py --camera-index 1 --frame-path tmp/probe_index1.jpg
+/tmp/edge-vla-live-venv/bin/python -m src.tools.vision_probe --camera-index 1 --frame-path tmp/probe_index1.jpg
 open tmp/probe_index1.jpg
 ```
 
 Then start the agent:
 
 ```bash
-/tmp/edge-vla-live-venv/bin/python main_agent.py \
+/tmp/edge-vla-live-venv/bin/python -m src.core.cli \
   --camera-index 1 \
   --whisper-model base.en \
   --whisper-language en \

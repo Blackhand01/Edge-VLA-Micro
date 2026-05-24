@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vision_module import VisionError, VisionModule
+from src.perception.vision_module import VisionError, VisionModule
 
 
 class FakeCapture:

@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 
-from drone_controller import DEFAULT_CONNECTION, DroneController
+from src.action import DEFAULT_CONNECTION, DroneController
 
 
 logger = logging.getLogger(__name__)

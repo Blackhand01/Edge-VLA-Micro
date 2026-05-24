@@ -33,11 +33,15 @@ For OFFBOARD motion, the controller maintains a MAVLink setpoint stream at 10 Hz
 
 Pipeline responsibilities:
 
-- `main_agent.py`: async agent loop, ASR, vision routing, status output, fallback policy.
-- `cognition_engine.py`: prompt construction, VLM inference, JSON extraction, HSV guardrail, schema repair, validation handoff.
-- `command_validator.py`: Pydantic command schema, state-machine business rules, deterministic safety override.
-- `drone_controller.py`: MAVSDK/PX4 control abstraction and OFFBOARD setpoint streaming.
-- `telemetry_logger.py`: asynchronous blackbox and performance logging.
+- `src/core/agent_loop.py`: async agent loop, vision routing, status output, fallback policy.
+- `src/audio/audio_module.py`: microphone capture, VAD thresholding, faster-whisper transcription.
+- `src/perception/cognition_engine.py`: prompt construction, JSON extraction, HSV guardrail, schema repair, validation handoff.
+- `src/perception/vlm_runtime.py`: MLX-VLM loading, streaming token profiling, TTFT/TPS fallback handling.
+- `src/safety/command_validator.py`: Pydantic command schema, state-machine business rules, deterministic safety override.
+- `src/action/drone_controller.py`: MAVSDK/PX4 control abstraction and OFFBOARD setpoint streaming.
+- `src/monitoring/telemetry_logger.py`: asynchronous blackbox and performance logging.
+
+Operational entrypoints are executed as Python modules, keeping the repository root reserved for documentation and configuration.
 
 ## Neuro-Symbolic Guardrail
 
@@ -82,11 +86,12 @@ Observed averages from the current SITL run:
 | Stage | Mean |
 | --- | ---: |
 | Audio ASR (Whisper) | ~4.0 s |
-| Vision Capture | ~203 ms |
+| Vision Capture | ~461 ms |
 | VLM TTFT (Prompt Eval) | ~3.9 s |
-| VLM Decode Throughput | ~45 TPS |
-| Safety Guardrail (Pydantic + HSV) | ~11 ms |
-| ASR + TTFT Bottleneck Share | ~87.5% |
+| VLM Decode Time | ~797 ms |
+| VLM Decode Throughput | ~46.3 TPS |
+| Safety Guardrail (Pydantic + HSV) | ~36.9 ms |
+| ASR + TTFT Bottleneck Share | ~85.8% |
 
 The key systems result is that the symbolic safety layer is not the bottleneck. Pydantic validation plus HSV target gating completes in approximately 11 ms, while ASR and TTFT dominate the control cycle. This supports the architectural decision to preserve deterministic guardrails while focusing optimization work on model-serving latency.
 
@@ -175,7 +180,7 @@ Wait until QGroundControl displays the simulated vehicle and telemetry stream.
 Camera indices vary by machine and OBS/virtual-camera configuration. Before running the agent, verify the actual capture device:
 
 ```bash
-/tmp/edge-vla-live-venv/bin/python vision_probe.py \
+/tmp/edge-vla-live-venv/bin/python -m src.tools.vision_probe \
   --camera-index 1 \
   --frame-path tmp/probe_index1.jpg
 
@@ -187,7 +192,7 @@ If the frame shows the OBS placeholder or a disabled-camera image, select a diff
 ### 5. Terminal 3 - Start the Edge-VLA Agent
 
 ```bash
-/tmp/edge-vla-live-venv/bin/python main_agent.py \
+/tmp/edge-vla-live-venv/bin/python -m src.core.cli \
   --camera-index 1 \
   --whisper-model base.en \
   --whisper-language en \

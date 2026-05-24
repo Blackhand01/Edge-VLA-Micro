@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from command_validator import (
+from src.safety.command_validator import (
     CommandValidator,
     DroneOperationalState,
     DroneStateSnapshot,

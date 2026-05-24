@@ -9,8 +9,8 @@ from multiprocessing import get_context
 from pathlib import Path
 from typing import Optional, Protocol
 
-from cognition_engine import CognitionEngine, CognitionError, CognitionResult, DEFAULT_MODEL_ID
-from command_validator import CommandValidator, DroneOperationalState, DroneStateSnapshot
+from src.perception import CognitionEngine, CognitionError, CognitionResult, DEFAULT_MODEL_ID
+from src.safety.command_validator import CommandValidator, DroneOperationalState, DroneStateSnapshot
 
 
 logger = logging.getLogger(__name__)

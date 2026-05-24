@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from telemetry_logger import BlackboxLogger, PerformanceLogger
+from src.monitoring import BlackboxLogger, PerformanceLogger
 
 
 class _FakeCv2:

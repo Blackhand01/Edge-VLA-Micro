@@ -26,7 +26,7 @@ Terminal 2:
 Terminal 3:
 
 ```sh
-.venv/bin/python heartbeat.py
+.venv/bin/python -m src.tools.heartbeat_monitor
 ```
 
 Stability gate before any flight-control logic:
@@ -34,7 +34,7 @@ Stability gate before any flight-control logic:
 ```sh
 param set COM_DISARM_PRFLT -1
 commander arm
-.venv/bin/python heartbeat.py --require-armed --cycles 50
+.venv/bin/python -m src.tools.heartbeat_monitor --require-armed --cycles 50
 ```
 
 The heartbeat node never arms, moves, takes off, lands, or sends setpoints. Arm using QGroundControl or the PX4 shell only when validating the armed-state monitor.
@@ -43,12 +43,12 @@ The heartbeat node never arms, moves, takes off, lands, or sends setpoints. Arm 
 
 # Phase 1: Control Abstraction Layer
 
-`drone_controller.py` exposes an importable `DroneController` around MAVSDK.
+`src/action/drone_controller.py` exposes an importable `DroneController` around MAVSDK.
 
 The mission harness is intentionally explicit:
 
 ```sh
-.venv/bin/python mission.py
+.venv/bin/python -m src.tools.demo_mission
 ```
 
 Expected preconditions:
@@ -69,11 +69,11 @@ param set COM_DISARM_PRFLT -1
 - `vz`: down velocity in m/s
 - `yaw_deg`: absolute yaw in degrees
 
-Do not run `mission.py` until the Phase 0 heartbeat gate is passing in the same SITL session.
+Do not run `src.tools.demo_mission` until the Phase 0 heartbeat gate is passing in the same SITL session.
 
 ## Safety Validator
 
-`command_validator.py` validates raw LLM JSON before any command reaches `DroneController`.
+`src/safety/command_validator.py` validates raw LLM JSON before any command reaches `DroneController`.
 
 Run the offline harness:
 
