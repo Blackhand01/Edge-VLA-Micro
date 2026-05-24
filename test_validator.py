@@ -7,8 +7,17 @@ from command_validator import (
     CommandValidator,
     DroneOperationalState,
     DroneStateSnapshot,
+    HoldModel,
     SafetyViolationError,
 )
+
+
+def _with_target(payload: dict) -> dict:
+    return {
+        **payload,
+        "target_found": True,
+        "reasoning": "target is visible or not required",
+    }
 
 
 class CommandValidatorTests(unittest.TestCase):
@@ -23,13 +32,15 @@ class CommandValidatorTests(unittest.TestCase):
 
     def test_rejects_out_of_scale_velocity(self) -> None:
         raw = json.dumps(
-            {
+            _with_target(
+                {
                 "command": "move_velocity",
                 "velocity_x": 500,
                 "velocity_y": 0,
                 "velocity_z": 0,
                 "yaw_deg": 0,
-            }
+                }
+            )
         )
 
         with self.assertRaises(SafetyViolationError) as ctx:
@@ -40,12 +51,14 @@ class CommandValidatorTests(unittest.TestCase):
 
     def test_rejects_missing_field(self) -> None:
         raw = json.dumps(
-            {
+            _with_target(
+                {
                 "command": "move_velocity",
                 "velocity_x": 1.0,
                 "velocity_y": 0.0,
                 "yaw_deg": 0.0,
-            }
+                }
+            )
         )
 
         with self.assertRaises(SafetyViolationError) as ctx:
@@ -54,7 +67,7 @@ class CommandValidatorTests(unittest.TestCase):
         self.assertIn("velocity_z", str(ctx.exception))
 
     def test_rejects_unknown_command(self) -> None:
-        raw = json.dumps({"command": "barrel_roll", "aggressiveness": 10})
+        raw = json.dumps(_with_target({"command": "barrel_roll", "aggressiveness": 10}))
 
         with self.assertRaises(SafetyViolationError) as ctx:
             self.airborne_validator.validate(raw)
@@ -71,13 +84,15 @@ class CommandValidatorTests(unittest.TestCase):
             )
         )
         raw = json.dumps(
-            {
+            _with_target(
+                {
                 "command": "move_velocity",
                 "velocity_x": 1.0,
                 "velocity_y": 0.0,
                 "velocity_z": 0.0,
                 "yaw_deg": 0.0,
-            }
+                }
+            )
         )
 
         with self.assertRaises(SafetyViolationError) as ctx:
@@ -87,13 +102,15 @@ class CommandValidatorTests(unittest.TestCase):
 
     def test_accepts_coherent_move_velocity(self) -> None:
         raw = json.dumps(
-            {
+            _with_target(
+                {
                 "command": "move_velocity",
                 "velocity_x": 1.0,
                 "velocity_y": -0.5,
                 "velocity_z": 0.0,
                 "yaw_deg": 15.0,
-            }
+                }
+            )
         )
 
         validated = self.airborne_validator.validate(raw)
@@ -113,7 +130,9 @@ class CommandValidatorTests(unittest.TestCase):
             )
         )
 
-        validated = validator.validate('{"command": "takeoff"}')
+        validated = validator.validate(
+            '{"command": "takeoff", "target_found": true, "reasoning": "takeoff requested"}'
+        )
 
         self.assertEqual(validated.controller_method, "takeoff")
 
@@ -126,12 +145,12 @@ class CommandValidatorTests(unittest.TestCase):
             )
         )
 
-        validated = validator.validate('{"command": "arm"}')
+        validated = validator.validate('{"command": "arm", "target_found": true, "reasoning": "arm requested"}')
 
         self.assertEqual(validated.controller_method, "arm")
 
         with self.assertRaises(SafetyViolationError) as ctx:
-            self.airborne_validator.validate('{"command": "arm"}')
+            self.airborne_validator.validate('{"command": "arm", "target_found": true, "reasoning": "arm requested"}')
 
         self.assertIn("arm not allowed while AIRBORNE", str(ctx.exception))
 
@@ -151,11 +170,23 @@ class CommandValidatorTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(grounded_validator.validate('{"command": "disarm"}').controller_method, "disarm")
-        self.assertEqual(landed_validator.validate('{"command": "disarm"}').controller_method, "disarm")
+        self.assertEqual(
+            grounded_validator.validate(
+                '{"command": "disarm", "target_found": true, "reasoning": "disarm requested"}'
+            ).controller_method,
+            "disarm",
+        )
+        self.assertEqual(
+            landed_validator.validate(
+                '{"command": "disarm", "target_found": true, "reasoning": "disarm requested"}'
+            ).controller_method,
+            "disarm",
+        )
 
         with self.assertRaises(SafetyViolationError) as ctx:
-            self.airborne_validator.validate('{"command": "disarm"}')
+            self.airborne_validator.validate(
+                '{"command": "disarm", "target_found": true, "reasoning": "disarm requested"}'
+            )
 
         self.assertIn("disarm not allowed while AIRBORNE", str(ctx.exception))
 
@@ -169,9 +200,30 @@ class CommandValidatorTests(unittest.TestCase):
         )
 
         with self.assertRaises(SafetyViolationError) as ctx:
-            validator.validate('{"command": "hold"}')
+            validator.validate('{"command": "hold", "target_found": true, "reasoning": "hold requested"}')
 
         self.assertIn("battery below mission threshold", str(ctx.exception))
+
+    def test_target_not_found_overrides_to_hold(self) -> None:
+        raw = json.dumps(
+            {
+                "command": "move_velocity",
+                "velocity_x": 1.0,
+                "velocity_y": 0.0,
+                "velocity_z": 0.0,
+                "yaw_deg": 0.0,
+                "target_found": False,
+                "reasoning": "red object not visible",
+            }
+        )
+
+        validated = self.airborne_validator.validate(raw)
+
+        self.assertIsInstance(validated.command, HoldModel)
+        self.assertEqual(validated.name, "hold")
+        self.assertEqual(validated.controller_kwargs(), {})
+        self.assertFalse(validated.raw["target_found"])
+        self.assertIn("TARGET_NOT_FOUND", validated.raw["reasoning"])
 
 
 if __name__ == "__main__":

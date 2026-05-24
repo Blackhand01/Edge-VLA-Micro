@@ -23,10 +23,32 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
 JSON_OBJECT_START_RE = re.compile(r"\{")
+COLOR_TARGET_RE = re.compile(r"\b(red|blue|rosso|blu)\b|\bhead\s+object\b", re.IGNORECASE)
+HSV_MIN_PIXELS = 50
+HSV_MIN_RATIO = 0.0002
+SAFE_COMMAND_PATTERNS = (
+    ("disarm", re.compile(r"\bdisarm\b", re.IGNORECASE)),
+    ("takeoff", re.compile(r"\b(take\s*off|takeoff|launch)\b", re.IGNORECASE)),
+    ("arm", re.compile(r"\barm\b", re.IGNORECASE)),
+    ("land", re.compile(r"\bland\b", re.IGNORECASE)),
+    ("hold", re.compile(r"\b(hold|hover)\b", re.IGNORECASE)),
+)
 SYSTEM_PROMPT = (
     "Sei il computer di bordo di un drone. Guarda l'immagine della telecamera FPV "
     "e leggi il comando vocale dell'operatore. Il tuo compito è estrarre l'intento "
-    "spaziale e tradurlo in un JSON valido conforme allo schema. Non aggiungere testo extra."
+    "spaziale e tradurlo in un JSON valido conforme allo schema. Ogni JSON deve "
+    "includere target_found e reasoning. Se l'oggetto richiesto non e' visibile "
+    "nell'immagine, imposta target_found=false e spiega il motivo in reasoning. "
+    "Rispondi con un solo comando JSON. Il campo command e' obbligatorio e deve "
+    "essere uno fra: arm, disarm, takeoff, land, hold, move_velocity. Se il comando "
+    "vocale contiene piu' azioni, scegli solo la prossima azione valida in base a "
+    "CURRENT_DRONE_STATE; se lo stato e' GROUNDED e viene richiesto arm/takeoff/move, "
+    "rispondi prima con arm. Esempio move valido: "
+    '{"command":"move_velocity","target_found":true,"reasoning":"red object visible",'
+    '"velocity_x":0.5,"velocity_y":0.0,"velocity_z":0.0,"yaw_deg":0.0}. '
+    'Esempio target assente: {"command":"hold","target_found":false,'
+    '"reasoning":"requested target not visible"}. '
+    "Non aggiungere testo extra."
 )
 
 
@@ -100,6 +122,9 @@ class CognitionEngine:
         try:
             raw_response = self._generate(raw_prompt, image_path=image_path)
             parsed_json = self._extract_json_object(raw_response)
+            self._apply_hsv_guardrail(text_input, image_path, parsed_json)
+            self._repair_missing_command_from_text(text_input, parsed_json, drone_state)
+            self._repair_missing_target_fields(parsed_json)
             validated = self.validator.validate(
                 json.dumps(parsed_json, ensure_ascii=False, separators=(",", ":")),
                 drone_state=drone_state,
@@ -240,6 +265,193 @@ class CognitionEngine:
             raise ValueError(f"LLM JSON must be an object, got {type(parsed).__name__}")
 
         return parsed
+
+    def _apply_hsv_guardrail(self, text_input: str, image_path: Optional[str], parsed_json: dict) -> None:
+        requested_color = self._requested_color(text_input)
+        if requested_color is None:
+            return
+
+        if not image_path:
+            self._force_target_not_found(
+                parsed_json,
+                f"OpenCV HSV guardrail: {requested_color} target requested but no frame is available.",
+            )
+            return
+
+        if not self._frame_contains_hsv_color(image_path, requested_color):
+            self._force_target_not_found(
+                parsed_json,
+                f"OpenCV HSV guardrail: requested {requested_color} target is absent from the frame.",
+            )
+            return
+
+        self._force_target_found(
+            parsed_json,
+            f"OpenCV HSV guardrail: requested {requested_color} target is present in the frame.",
+        )
+
+    @staticmethod
+    def _requested_color(text_input: str) -> Optional[str]:
+        match = COLOR_TARGET_RE.search(text_input)
+        if match is None:
+            return None
+
+        color = (match.group(1) or match.group(0)).lower()
+        if color == "head object":
+            logger.warning("ASR_COLOR_ALIAS: treating 'head object' as likely 'red object'")
+            return "red"
+        if color == "rosso":
+            return "red"
+        if color == "blu":
+            return "blue"
+        return color
+
+    @staticmethod
+    def _force_target_not_found(parsed_json: dict, reasoning: str) -> None:
+        logger.warning("SAFETY_OVERRIDE: TARGET_NOT_FOUND | %s", reasoning)
+        parsed_json["target_found"] = False
+        parsed_json["reasoning"] = reasoning
+
+    @staticmethod
+    def _force_target_found(parsed_json: dict, reasoning: str) -> None:
+        parsed_json["target_found"] = True
+        parsed_json["reasoning"] = reasoning
+
+    def _repair_missing_command_from_text(
+        self,
+        text_input: str,
+        parsed_json: dict,
+        drone_state: Optional[DroneStateSnapshot],
+    ) -> None:
+        if parsed_json.get("command"):
+            return
+
+        command = self._infer_safe_non_motion_command(text_input, drone_state)
+        if command is None:
+            return
+
+        logger.warning("SCHEMA_REPAIR: INFERRED_COMMAND | command=%s", command)
+        parsed_json["command"] = command
+        parsed_json.setdefault("target_found", True)
+        parsed_json.setdefault(
+            "reasoning",
+            f"Deterministic non-motion transcript fallback inferred command={command}.",
+        )
+
+    @staticmethod
+    def _repair_missing_target_fields(parsed_json: dict) -> None:
+        missing_fields = [field for field in ("target_found", "reasoning") if field not in parsed_json]
+        if not missing_fields:
+            return
+
+        logger.warning("SCHEMA_REPAIR: MISSING_TARGET_FIELDS | fields=%s", ",".join(missing_fields))
+        command = parsed_json.get("command")
+        if command in {"arm", "disarm", "takeoff", "land", "hold"}:
+            parsed_json.setdefault("target_found", True)
+            parsed_json.setdefault(
+                "reasoning",
+                f"Deterministic schema repair: VLM omitted target metadata for non-visual command={command}.",
+            )
+            return
+
+        parsed_json["target_found"] = False
+        parsed_json["reasoning"] = (
+            "SAFETY_OVERRIDE: TARGET_NOT_FOUND. VLM omitted required target_found/reasoning fields."
+        )
+
+    @staticmethod
+    def _infer_safe_non_motion_command(
+        text_input: str,
+        drone_state: Optional[DroneStateSnapshot],
+    ) -> Optional[str]:
+        matched = {command for command, pattern in SAFE_COMMAND_PATTERNS if pattern.search(text_input)}
+        if not matched:
+            return None
+
+        if drone_state is None:
+            return CognitionEngine._first_matched_command(text_input, matched)
+
+        state = drone_state.state
+        if state == DroneOperationalState.GROUNDED:
+            for command in ("arm", "disarm", "hold", "takeoff", "land"):
+                if command in matched:
+                    return command
+
+        if state == DroneOperationalState.ARMED:
+            for command in ("takeoff", "disarm", "hold", "arm", "land"):
+                if command in matched:
+                    return command
+
+        if state in {
+            DroneOperationalState.AIRBORNE,
+            DroneOperationalState.OFFBOARD,
+            DroneOperationalState.LANDING,
+        }:
+            for command in ("land", "hold", "takeoff", "disarm", "arm"):
+                if command in matched:
+                    return command
+
+        return CognitionEngine._first_matched_command(text_input, matched)
+
+    @staticmethod
+    def _first_matched_command(text_input: str, matched: set[str]) -> Optional[str]:
+        candidates: list[tuple[int, str]] = []
+        for command, pattern in SAFE_COMMAND_PATTERNS:
+            if command not in matched:
+                continue
+            match = pattern.search(text_input)
+            if match is not None:
+                candidates.append((match.start(), command))
+
+        if not candidates:
+            return None
+
+        return min(candidates, key=lambda item: item[0])[1]
+
+    @staticmethod
+    def _frame_contains_hsv_color(image_path: str, color: str) -> bool:
+        try:
+            import cv2  # pylint: disable=import-outside-toplevel
+            import numpy as np  # pylint: disable=import-outside-toplevel
+        except ImportError as exc:
+            logger.warning("SAFETY_OVERRIDE: TARGET_NOT_FOUND | OpenCV unavailable: %s", exc)
+            return False
+
+        frame = cv2.imread(image_path)
+        if frame is None:
+            logger.warning("SAFETY_OVERRIDE: TARGET_NOT_FOUND | OpenCV could not read frame: %s", image_path)
+            return False
+
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        if color == "red":
+            lower_1 = np.array([0, 80, 50], dtype=np.uint8)
+            upper_1 = np.array([10, 255, 255], dtype=np.uint8)
+            lower_2 = np.array([170, 80, 50], dtype=np.uint8)
+            upper_2 = np.array([180, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(hsv, lower_1, upper_1) | cv2.inRange(hsv, lower_2, upper_2)
+        elif color == "blue":
+            lower = np.array([100, 80, 50], dtype=np.uint8)
+            upper = np.array([130, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(hsv, lower, upper)
+        else:
+            return False
+
+        matching_pixels = int(cv2.countNonZero(mask))
+        total_pixels = int(mask.shape[0] * mask.shape[1])
+        if total_pixels <= 0:
+            return False
+
+        ratio = matching_pixels / total_pixels
+        logger.info(
+            "HSV target check: color=%s pixels=%d total=%d ratio=%.6f threshold_pixels=%d threshold_ratio=%.6f",
+            color,
+            matching_pixels,
+            total_pixels,
+            ratio,
+            HSV_MIN_PIXELS,
+            HSV_MIN_RATIO,
+        )
+        return matching_pixels >= HSV_MIN_PIXELS and ratio >= HSV_MIN_RATIO
 
     def _balanced_json_slice(self, text: str, start: int) -> str:
         depth = 0

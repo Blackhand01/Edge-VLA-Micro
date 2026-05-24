@@ -27,15 +27,16 @@ class VisionModule:
         *,
         camera_index: int = 0,
         output_path: str | Path = "tmp/frame.jpg",
+        debug_dir: str | Path | None = "tmp/frames",
         warmup_frames: int = 2,
     ) -> None:
         self.camera_index = camera_index
         self.output_path = Path(output_path)
+        self.debug_dir = Path(debug_dir) if debug_dir is not None else None
         self.warmup_frames = max(0, warmup_frames)
 
     async def capture_single_frame(self) -> VisionFrame:
-        await asyncio.sleep(0)
-        return self._capture_single_frame_sync()
+        return await asyncio.to_thread(self._capture_single_frame_sync)
 
     async def close(self) -> None:
         return
@@ -48,7 +49,8 @@ class VisionModule:
                 "OpenCV is not installed. Run: .venv/bin/python -m pip install -r requirements-phase4.txt"
             ) from exc
 
-        capture = cv2.VideoCapture(self.camera_index)
+        logger.info("Opening camera index=%s for one-shot frame capture", self.camera_index)
+        capture = self._open_capture(cv2)
         try:
             if not capture.isOpened():
                 raise VisionError(f"camera device {self.camera_index} is not available")
@@ -59,17 +61,51 @@ class VisionModule:
                 if not ok or frame is None:
                     raise VisionError(f"camera device {self.camera_index} did not return a frame")
 
+            height, width = frame.shape[:2]
             self.output_path.parent.mkdir(parents=True, exist_ok=True)
             saved = cv2.imwrite(str(self.output_path), frame)
             if not saved:
                 raise VisionError(f"failed to write frame to {self.output_path}")
 
+            captured_at = datetime.now(timezone.utc)
+            debug_path = self._write_debug_frame(cv2, frame, captured_at)
+            logger.info(
+                "Captured camera frame: index=%s size=%sx%s latest=%s debug=%s",
+                self.camera_index,
+                width,
+                height,
+                self.output_path,
+                debug_path or "<disabled>",
+            )
             return VisionFrame(
                 image_path=str(self.output_path),
-                captured_at=datetime.now(timezone.utc),
+                captured_at=captured_at,
             )
         finally:
             capture.release()
+            logger.info("Released camera index=%s", self.camera_index)
+
+    def _open_capture(self, cv2):
+        if hasattr(cv2, "CAP_AVFOUNDATION"):
+            try:
+                return cv2.VideoCapture(self.camera_index, cv2.CAP_AVFOUNDATION)
+            except TypeError:
+                pass
+
+        return cv2.VideoCapture(self.camera_index)
+
+    def _write_debug_frame(self, cv2, frame, captured_at: datetime) -> Optional[Path]:
+        if self.debug_dir is None:
+            return None
+
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = captured_at.strftime("%Y%m%dT%H%M%S%fZ")
+        debug_path = self.debug_dir / f"frame_{timestamp}.jpg"
+        if not cv2.imwrite(str(debug_path), frame):
+            logger.warning("Failed to write debug frame to %s", debug_path)
+            return None
+
+        return debug_path
 
 
 async def capture_single_frame(vision_module: Optional[VisionModule] = None) -> VisionFrame:

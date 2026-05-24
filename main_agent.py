@@ -3,10 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass
 from typing import Optional
+
+os.environ.setdefault("GLOG_minloglevel", "2")
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
 
 import numpy as np
 from mavsdk.telemetry import FlightMode
@@ -33,6 +37,10 @@ ACTIONABLE_PATTERN = re.compile(
     r"move|forward|backward|left|right|red|object|target|drone|"
     r"mantieni|posizione|vai|avanti"
     r")\b",
+    re.IGNORECASE,
+)
+VISION_REQUIRED_PATTERN = re.compile(
+    r"\b(move|forward|backward|left|right|red|blue|object|target)\b",
     re.IGNORECASE,
 )
 
@@ -289,14 +297,15 @@ class AgentLoop:
                 )
 
             image_path = None
-            vision_started = time.perf_counter()
-            try:
-                frame = await self.vision_module.capture_single_frame()
-                image_path = frame.image_path
-            except VisionError as exc:
-                logger.warning("Vision capture failed; continuing text-only: %s", exc)
-            finally:
-                vision_ms = self._elapsed_ms(vision_started)
+            if self._requires_vision(spoken_text):
+                vision_started = time.perf_counter()
+                try:
+                    frame = await self.vision_module.capture_single_frame()
+                    image_path = frame.image_path
+                except VisionError as exc:
+                    logger.warning("Vision capture failed; continuing text-only: %s", exc)
+                finally:
+                    vision_ms = self._elapsed_ms(vision_started)
 
             drone_state = self._build_drone_snapshot()
             vlm_started = time.perf_counter()
@@ -376,6 +385,10 @@ class AgentLoop:
             await self.vision_module.close()
 
     async def _dispatch_command(self, command: ValidatedCommand) -> str:
+        if command.name == "hold" and not self.drone_controller.state.in_air:
+            logger.warning("Command HOLD skipped: vehicle is not airborne")
+            return "HOLD_SKIPPED:NOT_AIRBORNE_SAFE"
+
         method_name = command.controller_method
         controller_method = getattr(self.drone_controller, method_name, None)
         if controller_method is None:
@@ -386,6 +399,10 @@ class AgentLoop:
         return f"EXECUTED:{command.name}"
 
     async def _safe_hold(self, reason: str) -> str:
+        if not self.drone_controller.state.in_air:
+            logger.warning("Fallback HOLD skipped (%s): vehicle is not airborne", reason)
+            return f"HOLD_SKIPPED:{reason}:NOT_AIRBORNE_SAFE"
+
         try:
             await self.drone_controller.hold()
             logger.warning("Fallback HOLD applied: %s", reason)
@@ -476,6 +493,10 @@ class AgentLoop:
     def _elapsed_ms(started_at: float) -> float:
         return (time.perf_counter() - started_at) * 1000.0
 
+    @staticmethod
+    def _requires_vision(spoken_text: str) -> bool:
+        return VISION_REQUIRED_PATTERN.search(spoken_text) is not None
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Main async agent loop: audio -> cognition -> safety -> drone action.")
@@ -489,6 +510,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--audio-device", default=None, help="Optional sounddevice input device.")
     parser.add_argument("--camera-index", default=0, type=int, help="OpenCV camera index.")
     parser.add_argument("--frame-path", default="tmp/frame.jpg", help="Path for the one-shot camera frame.")
+    parser.add_argument(
+        "--vision-debug-dir",
+        default="tmp/frames",
+        help="Directory for timestamped camera snapshots. Use 'none' to disable.",
+    )
     parser.add_argument("--sample-rate", default=16_000, type=int, help="Microphone sample rate.")
     parser.add_argument("--silence-threshold", default=0.006, type=float, help="RMS threshold used to start voice capture.")
     parser.add_argument("--trailing-silence", default=0.80, type=float, help="Seconds of silence used to end a voice command.")
@@ -524,6 +550,7 @@ async def run_agent(args: argparse.Namespace) -> None:
     vision_module = VisionModule(
         camera_index=args.camera_index,
         output_path=args.frame_path,
+        debug_dir=None if str(args.vision_debug_dir).lower() == "none" else args.vision_debug_dir,
     )
     await asyncio.to_thread(cognition_engine.warmup)
     agent = AgentLoop(

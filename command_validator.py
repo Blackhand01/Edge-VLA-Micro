@@ -42,6 +42,9 @@ class DroneStateSnapshot(BaseModel):
 class CommandModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    target_found: bool
+    reasoning: str = Field(min_length=1)
+
 
 class ArmModel(CommandModel):
     command: Literal["arm"]
@@ -123,6 +126,14 @@ class CommandValidator:
         state = drone_state or self.drone_state
         raw = self._parse_json(raw_json)
         command = self._validate_schema(raw)
+        if not command.target_found:
+            logger.warning("SAFETY_OVERRIDE: TARGET_NOT_FOUND | %s", command.reasoning)
+            command = HoldModel(
+                command="hold",
+                target_found=False,
+                reasoning=f"SAFETY_OVERRIDE: TARGET_NOT_FOUND. {command.reasoning}",
+            )
+            raw = command.model_dump(mode="json")
         self._check_business_rules(command, state)
         logger.info("Command accepted: %s in state %s", command.command, state.state.value)
         return ValidatedCommand(command=command, raw=raw)
@@ -190,6 +201,9 @@ class CommandValidator:
 
         if isinstance(command, HoldModel):
             return {
+                DroneOperationalState.GROUNDED,
+                DroneOperationalState.LANDED,
+                DroneOperationalState.ARMED,
                 DroneOperationalState.AIRBORNE,
                 DroneOperationalState.OFFBOARD,
             }
