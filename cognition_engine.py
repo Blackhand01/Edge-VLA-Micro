@@ -145,6 +145,27 @@ class CognitionEngine:
         self._log_transaction(raw_prompt, raw_response, parsed_json, result)
         return result
 
+    def warmup(self) -> None:
+        logger.info("Pre-warming VLM models and compiling Metal shaders...")
+
+        if self._external_generator is not None:
+            self._external_generator("warmup", None)
+            logger.info("VLM Warm-up complete.")
+            return
+
+        self._load_local_model()
+        assert self._mlx_generate is not None
+        self._mlx_generate(
+            self._model,
+            self._processor,
+            prompt="warmup",
+            image=None,
+            max_tokens=1,
+            temperature=self.temperature,
+            verbose=False,
+        )
+        logger.info("VLM Warm-up complete.")
+
     def _build_prompt(
         self,
         intent_text: str,

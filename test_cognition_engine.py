@@ -26,6 +26,20 @@ def _process_quiet(engine: CognitionEngine, text: str, **kwargs) -> CognitionRes
 
 
 class CognitionEngineTests(unittest.TestCase):
+    def test_warmup_runs_minimal_generator_call(self) -> None:
+        observed: dict[str, object] = {}
+
+        def generator(prompt: str, image_path: str | None) -> str:
+            observed["prompt"] = prompt
+            observed["image_path"] = image_path
+            return "x"
+
+        engine = CognitionEngine(generator=generator)
+
+        engine.warmup()
+
+        self.assertEqual(observed, {"prompt": "warmup", "image_path": None})
+
     def test_process_intent_accepts_valid_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(

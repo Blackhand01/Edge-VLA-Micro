@@ -525,6 +525,7 @@ async def run_agent(args: argparse.Namespace) -> None:
         camera_index=args.camera_index,
         output_path=args.frame_path,
     )
+    await asyncio.to_thread(cognition_engine.warmup)
     agent = AgentLoop(
         drone_controller=controller,
         cognition_engine=cognition_engine,
