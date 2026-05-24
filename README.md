@@ -1,20 +1,20 @@
 # Edge-VLA-Micro
 
-## Live demo — Esecuzione locale
+## Live Demo
 
-Apri 3 terminali nella root del repository:
+Open 3 terminals from the repository root:
 
 ```bash
 cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
 ```
 
-Terminale 1: PX4 + jMAVSim
+Terminal 1: PX4 + jMAVSim
 
 ```bash
 ./scripts/run_jmavsim.sh
 ```
 
-Attendi righe come:
+Wait for lines such as:
 
 ```text
 Simulator connected on TCP port 4560
@@ -22,26 +22,31 @@ mavlink ... udp port 14580 remote port 14540
 Ready for takeoff
 ```
 
-Terminale 2: QGroundControl
+Terminal 2: QGroundControl
 
 ```bash
 ./scripts/run_qgc.sh
 ```
 
-Attendi che QGC mostri il drone.
+Wait until QGroundControl shows the drone.
 
-Terminale 3: main agent con log live (usa la runtime esterna)
+Terminal 3: main agent with live logs, camera index 1, isolated VLM process, and blackbox logging
 
 ```bash
 /tmp/edge-vla-live-venv/bin/python main_agent.py \
-	--whisper-model base.en \
-	--whisper-language en \
-	--silence-threshold 0.004 \
-	--trailing-silence 1.2 \
-	--max-record 7.0
+  --camera-index 1 \
+  --whisper-model base.en \
+  --whisper-language en \
+  --silence-threshold 0.015 \
+  --trailing-silence 0.6 \
+  --max-record 3.0 \
+  --cognition-backend process \
+  --cognition-timeout 75 \
+  --blackbox-dir logs/sessions \
+  --performance-log logs/performance.csv
 ```
 
-Parla in frasi brevi, per esempio:
+Use short voice commands, for example:
 
 ```text
 Arm the drone.
@@ -50,26 +55,53 @@ Move toward the red object.
 Move forward one meter per second.
 ```
 
-Vedrai log tipo:
+You should see logs such as:
 
 ```text
 [STATE] AIRBORNE | [INPUT] Take off. | [ACTION] EXECUTED:takeoff | [AUDIO_MS] ... | [VISION_MS] ... | [VLM_MS] ... | [TOTAL_LATENCY] ...
 ```
 
-Per chiudere in sicurezza:
+To shut down safely:
 
 ```text
 Land.
 ```
 
-oppure premi `CTRL+C`; dopo `CTRL+C` verifica stato con:
+or press `CTRL+C`; after `CTRL+C`, verify the state with:
 
 ```bash
 /tmp/edge-vla-live-venv/bin/python heartbeat.py --cycles 1 --timeout 10 --interval 1
 ```
 
-Per log persistente VLM/validator:
+For persistent VLM/validator logs:
 
 ```bash
 tail -f logs/cognition.log
 ```
+
+To verify the camera before the demo:
+
+```bash
+/tmp/edge-vla-live-venv/bin/python vision_probe.py --camera-index 1 --frame-path tmp/probe_index1.jpg
+open tmp/probe_index1.jpg
+```
+
+Blackbox bundles are saved in:
+
+```text
+logs/sessions/
+```
+
+Per-run latency metrics are appended to:
+
+```text
+logs/performance.csv
+```
+
+Generate whitepaper charts after a run with:
+
+```bash
+/tmp/edge-vla-live-venv/bin/python scripts/generate_charts.py --input logs/performance.csv --output-dir docs
+```
+
+The complete 3-terminal command reference is also available in [docs/commands.md](docs/commands.md).

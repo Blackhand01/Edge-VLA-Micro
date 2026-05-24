@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import unittest
 from types import SimpleNamespace
 
@@ -35,6 +36,22 @@ class FakeCognitionEngine:
         if self.outputs:
             return self.outputs.pop(0)
         return CognitionError(reason="INFERENCE_ERROR", raw_prompt="", details="no output configured")
+
+    def warmup(self) -> None:
+        return
+
+
+class ThreadRecordingCognitionEngine(FakeCognitionEngine):
+    def __init__(self, outputs: list[CognitionResult | CognitionError]) -> None:
+        super().__init__(outputs)
+        self.thread_ids: list[tuple[str, int]] = []
+
+    def warmup(self) -> None:
+        self.thread_ids.append(("warmup", threading.get_ident()))
+
+    def process_intent(self, text: str, image_path: str | None = None, *, drone_state=None):
+        self.thread_ids.append(("process", threading.get_ident()))
+        return super().process_intent(text, image_path, drone_state=drone_state)
 
 
 class FakeDroneController:
@@ -85,6 +102,18 @@ class FakeVisionModule:
         self.closed = True
 
 
+class FakeBlackboxLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str | None, dict]] = []
+        self.closed = False
+
+    def log_inference(self, *, image_path: str | None, payload: dict) -> None:
+        self.events.append((image_path, payload))
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 def _command_raw(command: str) -> dict[str, object]:
     return {
         "command": command,
@@ -122,7 +151,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         controller = FakeDroneController()
-        audio = FakeAudioModule(["mantieni posizione"])
+        audio = FakeAudioModule(["hold position"])
         vision = FakeVisionModule("/tmp/frame.jpg")
         agent = AgentLoop(
             drone_controller=controller,
@@ -137,6 +166,74 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status.action, "EXECUTED:hold")
         self.assertEqual(vision.capture_calls, 0)
         self.assertEqual(cognition.calls[0][1], None)
+
+    async def test_iteration_logs_blackbox_for_inference(self) -> None:
+        command = ValidatedCommand(
+            command=LandModel(command="land", target_found=True, reasoning="test command"),
+            raw=_command_raw("land"),
+        )
+        cognition = FakeCognitionEngine(
+            [
+                CognitionResult(
+                    raw_prompt="PROMPT",
+                    raw_response='{"command":"land","target_found":true,"reasoning":"test command"}',
+                    parsed_json=_command_raw("land"),
+                    validated_command=command,
+                )
+            ]
+        )
+        controller = FakeDroneController()
+        audio = FakeAudioModule(["move forward"])
+        vision = FakeVisionModule("/tmp/frame.jpg")
+        blackbox = FakeBlackboxLogger()
+        agent = AgentLoop(
+            drone_controller=controller,
+            cognition_engine=cognition,
+            audio_module=audio,
+            vision_module=vision,
+            blackbox_logger=blackbox,
+        )
+
+        await agent.run_iteration()
+
+        self.assertEqual(len(blackbox.events), 1)
+        image_path, payload = blackbox.events[0]
+        self.assertEqual(image_path, "/tmp/frame.jpg")
+        self.assertEqual(payload["prompt"], "PROMPT")
+        self.assertEqual(payload["validation"]["status"], "ACCEPTED")
+        self.assertEqual(payload["validation"]["name"], "land")
+
+    async def test_warmup_and_iteration_use_same_cognition_thread(self) -> None:
+        command = ValidatedCommand(
+            command=LandModel(command="land", target_found=True, reasoning="test command"),
+            raw=_command_raw("land"),
+        )
+        cognition = ThreadRecordingCognitionEngine(
+            [
+                CognitionResult(
+                    raw_prompt="PROMPT",
+                    raw_response='{"command":"land","target_found":true,"reasoning":"test command"}',
+                    parsed_json=_command_raw("land"),
+                    validated_command=command,
+                )
+            ]
+        )
+        controller = FakeDroneController()
+        audio = FakeAudioModule(["move forward"])
+        vision = FakeVisionModule("/tmp/frame.jpg")
+        agent = AgentLoop(
+            drone_controller=controller,
+            cognition_engine=cognition,
+            audio_module=audio,
+            vision_module=vision,
+        )
+
+        await agent.warmup_cognition()
+        await agent.run_iteration()
+        await agent.shutdown()
+
+        self.assertEqual([name for name, _ in cognition.thread_ids], ["warmup", "process"])
+        self.assertEqual(cognition.thread_ids[0][1], cognition.thread_ids[1][1])
 
     async def test_iteration_executes_arm_without_vision_capture(self) -> None:
         command = ValidatedCommand(
@@ -175,7 +272,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
     async def test_iteration_emergency_keyword_triggers_hold(self) -> None:
         cognition = FakeCognitionEngine([])
         controller = FakeDroneController()
-        audio = FakeAudioModule(["Emergency immediato"])
+        audio = FakeAudioModule(["Emergency now"])
         vision = FakeVisionModule()
         agent = AgentLoop(
             drone_controller=controller,
@@ -203,7 +300,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         controller = FakeDroneController()
-        audio = FakeAudioModule(["vai avanti"])
+        audio = FakeAudioModule(["move forward"])
         vision = FakeVisionModule()
         agent = AgentLoop(
             drone_controller=controller,
@@ -310,7 +407,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         controller = FakeDroneController()
-        audio = FakeAudioModule(["mantieni posizione"])
+        audio = FakeAudioModule(["hold position"])
         vision = FakeVisionModule(fail=True)
         agent = AgentLoop(
             drone_controller=controller,
@@ -396,11 +493,13 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
         controller = FakeDroneController()
         audio = FakeAudioModule([])
         vision = FakeVisionModule()
+        blackbox = FakeBlackboxLogger()
         agent = AgentLoop(
             drone_controller=controller,
             cognition_engine=cognition,
             audio_module=audio,
             vision_module=vision,
+            blackbox_logger=blackbox,
         )
 
         await agent.shutdown()
@@ -408,6 +507,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(controller.calls, ["land", "close"])
         self.assertTrue(audio.closed)
         self.assertTrue(vision.closed)
+        self.assertTrue(blackbox.closed)
 
     async def test_snapshot_distinguishes_pre_takeoff_armed_from_landed(self) -> None:
         cognition = FakeCognitionEngine([])

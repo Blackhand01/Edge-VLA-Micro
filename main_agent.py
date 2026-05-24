@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Optional
 
@@ -15,7 +16,8 @@ os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
 import numpy as np
 from mavsdk.telemetry import FlightMode
 
-from cognition_engine import CognitionEngine, CognitionError, CognitionResult, DEFAULT_MODEL_ID
+from cognition_engine import CognitionEngine, CognitionError, CognitionResult, DEFAULT_MODEL_ID, VLMProfile
+from cognition_service import AsyncCognitionService, ProcessCognitionService, ThreadedCognitionService
 from command_validator import (
     CommandValidator,
     DroneOperationalState,
@@ -23,6 +25,7 @@ from command_validator import (
     ValidatedCommand,
 )
 from drone_controller import DEFAULT_CONNECTION, DroneController, DroneStateError
+from telemetry_logger import BlackboxLogger, PerformanceLogger
 from vision_module import VisionError, VisionModule
 
 
@@ -34,8 +37,7 @@ EMERGENCY_PATTERN = re.compile(r"\b(stop|emergency|emergenza)\b", re.IGNORECASE)
 ACTIONABLE_PATTERN = re.compile(
     r"\b("
     r"arm|armed|disarm|take\s*off|takeoff|launch|land|hold|hover|"
-    r"move|forward|backward|left|right|red|object|target|drone|"
-    r"mantieni|posizione|vai|avanti"
+    r"move|forward|backward|left|right|red|object|target|drone"
     r")\b",
     re.IGNORECASE,
 )
@@ -53,6 +55,10 @@ class LoopStatus:
     audio_ms: float
     vision_ms: float
     vlm_ms: float
+    vlm_ttft_ms: float
+    vlm_decode_time_ms: float
+    vlm_tps: float
+    safety_ms: float
     total_latency_ms: float
 
 
@@ -224,6 +230,10 @@ class AgentLoop:
         cognition_engine: CognitionEngine,
         audio_module: AudioModule,
         vision_module: VisionModule,
+        blackbox_logger: Optional[BlackboxLogger] = None,
+        performance_logger: Optional[PerformanceLogger] = None,
+        cognition_executor: Optional[ThreadPoolExecutor] = None,
+        cognition_service: Optional[AsyncCognitionService] = None,
         max_cognition_failures: int = 3,
         idle_sleep_s: float = 0.10,
     ) -> None:
@@ -231,11 +241,20 @@ class AgentLoop:
         self.cognition_engine = cognition_engine
         self.audio_module = audio_module
         self.vision_module = vision_module
+        self.blackbox_logger = blackbox_logger
+        self.performance_logger = performance_logger
+        self.cognition_service = cognition_service or ThreadedCognitionService(
+            cognition_engine,
+            executor=cognition_executor,
+        )
         self.max_cognition_failures = max(1, max_cognition_failures)
         self.idle_sleep_s = idle_sleep_s
         self._consecutive_cognition_failures = 0
         self._shutdown_done = False
         self._has_been_airborne = False
+
+    async def warmup_cognition(self) -> None:
+        await self.cognition_service.warmup()
 
     async def run(self) -> None:
         try:
@@ -258,6 +277,7 @@ class AgentLoop:
         audio_ms = 0.0
         vision_ms = 0.0
         vlm_ms = 0.0
+        vlm_profile = VLMProfile()
 
         try:
             audio_started = time.perf_counter()
@@ -309,13 +329,22 @@ class AgentLoop:
 
             drone_state = self._build_drone_snapshot()
             vlm_started = time.perf_counter()
-            cognition_result = await asyncio.to_thread(
-                self.cognition_engine.process_intent,
+            cognition_result = await self.cognition_service.process_intent(
                 spoken_text,
                 image_path,
                 drone_state=drone_state,
             )
             vlm_ms = self._elapsed_ms(vlm_started)
+            vlm_profile = cognition_result.vlm_profile
+            self._log_blackbox_inference(
+                input_text=spoken_text,
+                image_path=image_path,
+                cognition_result=cognition_result,
+                drone_state=drone_state,
+                audio_ms=audio_ms,
+                vision_ms=vision_ms,
+                vlm_ms=vlm_ms,
+            )
 
             if isinstance(cognition_result, CognitionError):
                 self._consecutive_cognition_failures += 1
@@ -337,6 +366,8 @@ class AgentLoop:
                     audio_ms=audio_ms,
                     vision_ms=vision_ms,
                     vlm_ms=vlm_ms,
+                    vlm_profile=vlm_profile,
+                    record_performance=True,
                 )
 
             assert isinstance(cognition_result, CognitionResult)
@@ -350,6 +381,8 @@ class AgentLoop:
                 audio_ms=audio_ms,
                 vision_ms=vision_ms,
                 vlm_ms=vlm_ms,
+                vlm_profile=vlm_profile,
+                record_performance=True,
             )
         except Exception:
             logger.exception("Agent loop iteration failed")
@@ -361,6 +394,8 @@ class AgentLoop:
                 audio_ms=audio_ms,
                 vision_ms=vision_ms,
                 vlm_ms=vlm_ms,
+                vlm_profile=vlm_profile,
+                record_performance=vlm_ms > 0.0,
             )
 
     async def shutdown(self) -> None:
@@ -381,8 +416,13 @@ class AgentLoop:
                     logger.warning("Safe shutdown landing skipped: %s", exc)
         finally:
             await self.drone_controller.close()
-            await self.audio_module.close()
-            await self.vision_module.close()
+        await self.audio_module.close()
+        await self.vision_module.close()
+        if self.blackbox_logger is not None:
+            await self.blackbox_logger.close()
+        if self.performance_logger is not None:
+            await self.performance_logger.close()
+        await self.cognition_service.close()
 
     async def _dispatch_command(self, command: ValidatedCommand) -> str:
         if command.name == "hold" and not self.drone_controller.state.in_air:
@@ -458,17 +498,32 @@ class AgentLoop:
         audio_ms: float,
         vision_ms: float,
         vlm_ms: float,
+        vlm_profile: Optional[VLMProfile] = None,
+        record_performance: bool = False,
     ) -> LoopStatus:
+        profile = vlm_profile or VLMProfile()
         state = self._build_drone_snapshot().state.value
         total_latency_ms = self._elapsed_ms(started_at)
         compact_input = self._compact_text(input_text)
+        if record_performance and self.performance_logger is not None:
+            self.performance_logger.log_run(
+                audio_ms=audio_ms,
+                vision_ms=vision_ms,
+                ttft_ms=profile.ttft_ms,
+                decode_time_ms=profile.decode_time_ms,
+                tps=profile.tps,
+                safety_ms=profile.safety_ms,
+                total_latency_ms=total_latency_ms,
+            )
         line = (
             f"[STATE] {state} | "
             f"[INPUT] {compact_input} | "
             f"[ACTION] {action} | "
             f"[AUDIO_MS] {audio_ms:.1f} | "
             f"[VISION_MS] {vision_ms:.1f} | "
-            f"[VLM_MS] {vlm_ms:.1f} | "
+            f"[VLM_TTFT] {profile.ttft_ms:.1f}ms | "
+            f"[VLM_TPS] {profile.tps:.2f} | "
+            f"[SAFETY_MS] {profile.safety_ms:.1f} | "
             f"[TOTAL_LATENCY] {total_latency_ms:.1f}ms"
         )
         print(line, flush=True)
@@ -479,6 +534,10 @@ class AgentLoop:
             audio_ms=audio_ms,
             vision_ms=vision_ms,
             vlm_ms=vlm_ms,
+            vlm_ttft_ms=profile.ttft_ms,
+            vlm_decode_time_ms=profile.decode_time_ms,
+            vlm_tps=profile.tps,
+            safety_ms=profile.safety_ms,
             total_latency_ms=total_latency_ms,
         )
 
@@ -496,6 +555,80 @@ class AgentLoop:
     @staticmethod
     def _requires_vision(spoken_text: str) -> bool:
         return VISION_REQUIRED_PATTERN.search(spoken_text) is not None
+
+    def _log_blackbox_inference(
+        self,
+        *,
+        input_text: str,
+        image_path: Optional[str],
+        cognition_result: CognitionResult | CognitionError,
+        drone_state: DroneStateSnapshot,
+        audio_ms: float,
+        vision_ms: float,
+        vlm_ms: float,
+    ) -> None:
+        if self.blackbox_logger is None:
+            return
+
+        payload = {
+            "input_text": input_text,
+            "drone_state_at_inference": drone_state.model_dump(mode="json"),
+            "drone_kinematics": self._kinematic_state_dict(drone_state),
+            "timing_ms": {
+                "audio": audio_ms,
+                "vision": vision_ms,
+                "vlm": vlm_ms,
+                "vlm_ttft": cognition_result.vlm_profile.ttft_ms,
+                "vlm_decode": cognition_result.vlm_profile.decode_time_ms,
+                "vlm_tps": cognition_result.vlm_profile.tps,
+                "safety": cognition_result.vlm_profile.safety_ms,
+            },
+            "vlm_profile": cognition_result.vlm_profile.model_dump(),
+            "prompt": cognition_result.raw_prompt,
+            "raw_response": cognition_result.raw_response,
+            "parsed_json": cognition_result.parsed_json,
+        }
+
+        if isinstance(cognition_result, CognitionResult):
+            command = cognition_result.validated_command
+            payload["validation"] = {
+                "status": "ACCEPTED",
+                "name": command.name,
+                "controller_method": command.controller_method,
+                "controller_kwargs": command.controller_kwargs(),
+                "raw": command.raw,
+            }
+        else:
+            payload["validation"] = {
+                "status": "REJECTED",
+                "reason": cognition_result.reason,
+                "details": cognition_result.details,
+            }
+
+        self.blackbox_logger.log_inference(
+            image_path=image_path,
+            payload=payload,
+        )
+
+    def _kinematic_state_dict(self, drone_state: DroneStateSnapshot) -> dict:
+        flight_mode = self.drone_controller.state.flight_mode
+        flight_mode_name = flight_mode.name if flight_mode is not None else None
+        battery = self.drone_controller.state.battery
+        battery_remaining = None
+        if battery is not None:
+            battery_remaining = float(battery.remaining_percent)
+            if battery_remaining > 1.0:
+                battery_remaining = battery_remaining / 100.0
+            battery_remaining = max(0.0, min(1.0, battery_remaining))
+
+        return {
+            "operational_state": drone_state.state.value,
+            "connected": bool(self.drone_controller.state.connected),
+            "armed": bool(self.drone_controller.state.armed),
+            "in_air": bool(self.drone_controller.state.in_air),
+            "flight_mode": flight_mode_name,
+            "battery_remaining": battery_remaining,
+        }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -520,7 +653,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trailing-silence", default=0.80, type=float, help="Seconds of silence used to end a voice command.")
     parser.add_argument("--max-record", default=5.0, type=float, help="Maximum seconds to record a single voice command.")
     parser.add_argument("--cognition-model", default=DEFAULT_MODEL_ID, help="MLX model id for CognitionEngine.")
+    parser.add_argument(
+        "--cognition-backend",
+        choices=("process", "thread"),
+        default="process",
+        help="Run the VLM in an isolated process by default so native Metal crashes cannot kill the agent.",
+    )
+    parser.add_argument(
+        "--cognition-timeout",
+        default=75.0,
+        type=float,
+        help="Seconds before a stuck cognition worker is treated as failed.",
+    )
     parser.add_argument("--max-cognition-failures", default=3, type=int, help="Consecutive cognition failures before emergency hold.")
+    parser.add_argument("--blackbox-dir", default="logs/sessions", help="Directory for blackbox telemetry bundles.")
+    parser.add_argument("--performance-log", default="logs/performance.csv", help="CSV path for per-inference latency metrics.")
     return parser
 
 
@@ -552,15 +699,34 @@ async def run_agent(args: argparse.Namespace) -> None:
         output_path=args.frame_path,
         debug_dir=None if str(args.vision_debug_dir).lower() == "none" else args.vision_debug_dir,
     )
-    await asyncio.to_thread(cognition_engine.warmup)
+    blackbox_logger = BlackboxLogger(sessions_dir=args.blackbox_dir)
+    performance_logger = PerformanceLogger(path=args.performance_log)
+    cognition_service: AsyncCognitionService
+    if args.cognition_backend == "process":
+        cognition_service = ProcessCognitionService(
+            model_id=args.cognition_model,
+            temperature=0.0,
+            timeout_s=args.cognition_timeout,
+        )
+    else:
+        cognition_service = ThreadedCognitionService(cognition_engine)
+
     agent = AgentLoop(
         drone_controller=controller,
         cognition_engine=cognition_engine,
         audio_module=audio_module,
         vision_module=vision_module,
+        blackbox_logger=blackbox_logger,
+        performance_logger=performance_logger,
+        cognition_service=cognition_service,
         max_cognition_failures=args.max_cognition_failures,
     )
-    await agent.run()
+    try:
+        await agent.warmup_cognition()
+        await agent.run()
+    except Exception:
+        await agent.shutdown()
+        raise
 
 
 def main() -> int:

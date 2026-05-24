@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from command_validator import (
     ActionCommand,
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
 JSON_OBJECT_START_RE = re.compile(r"\{")
-COLOR_TARGET_RE = re.compile(r"\b(red|blue|rosso|blu)\b|\bhead\s+object\b", re.IGNORECASE)
+COLOR_TARGET_RE = re.compile(r"\b(red|blue)\b|\bhead\s+object\b", re.IGNORECASE)
 HSV_MIN_PIXELS = 50
 HSV_MIN_RATIO = 0.0002
 SAFE_COMMAND_PATTERNS = (
@@ -33,23 +34,63 @@ SAFE_COMMAND_PATTERNS = (
     ("land", re.compile(r"\bland\b", re.IGNORECASE)),
     ("hold", re.compile(r"\b(hold|hover)\b", re.IGNORECASE)),
 )
+BASE_COMMAND_FIELDS = frozenset({"command", "target_found", "reasoning"})
+COMMAND_ALLOWED_FIELDS = {
+    "arm": BASE_COMMAND_FIELDS,
+    "disarm": BASE_COMMAND_FIELDS,
+    "takeoff": BASE_COMMAND_FIELDS,
+    "land": BASE_COMMAND_FIELDS,
+    "hold": BASE_COMMAND_FIELDS,
+    "move_velocity": BASE_COMMAND_FIELDS
+    | frozenset({"velocity_x", "velocity_y", "velocity_z", "yaw_deg"}),
+}
 SYSTEM_PROMPT = (
-    "Sei il computer di bordo di un drone. Guarda l'immagine della telecamera FPV "
-    "e leggi il comando vocale dell'operatore. Il tuo compito è estrarre l'intento "
-    "spaziale e tradurlo in un JSON valido conforme allo schema. Ogni JSON deve "
-    "includere target_found e reasoning. Se l'oggetto richiesto non e' visibile "
-    "nell'immagine, imposta target_found=false e spiega il motivo in reasoning. "
-    "Rispondi con un solo comando JSON. Il campo command e' obbligatorio e deve "
-    "essere uno fra: arm, disarm, takeoff, land, hold, move_velocity. Se il comando "
-    "vocale contiene piu' azioni, scegli solo la prossima azione valida in base a "
-    "CURRENT_DRONE_STATE; se lo stato e' GROUNDED e viene richiesto arm/takeoff/move, "
-    "rispondi prima con arm. Esempio move valido: "
+    "You are the onboard computer of a drone. Inspect the FPV camera image and "
+    "read the operator's voice command. Your task is to extract the spatial intent "
+    "and translate it into valid JSON that conforms to the schema. Every JSON object "
+    "must include target_found and reasoning. If the requested object is not visible "
+    "in the image, set target_found=false and explain why in reasoning. "
+    "Return exactly one JSON command. The command field is required and must be one "
+    "of: arm, disarm, takeoff, land, hold, move_velocity. If the voice command "
+    "contains multiple actions, choose only the next valid action based on "
+    "CURRENT_DRONE_STATE; if the state is GROUNDED and arm/takeoff/move is requested, "
+    "respond with arm first. Valid move example: "
     '{"command":"move_velocity","target_found":true,"reasoning":"red object visible",'
     '"velocity_x":0.5,"velocity_y":0.0,"velocity_z":0.0,"yaw_deg":0.0}. '
-    'Esempio target assente: {"command":"hold","target_found":false,'
+    'Missing target example: {"command":"hold","target_found":false,'
     '"reasoning":"requested target not visible"}. '
-    "Non aggiungere testo extra."
+    "Do not include telemetry fields such as battery_remaining, state, connected, "
+    "altitude, or GPS data in the JSON command. "
+    "Do not add extra text."
 )
+
+
+@dataclass
+class VLMProfile:
+    prompt_eval_ms: Optional[float] = None
+    ttft_ms: float = 0.0
+    decode_time_ms: float = 0.0
+    generated_tokens: int = 0
+    tps: float = 0.0
+    safety_ms: float = 0.0
+    used_streaming: bool = False
+    fallback_reason: Optional[str] = None
+
+    def model_dump(self) -> dict[str, Any]:
+        return {
+            "prompt_eval_ms": self.prompt_eval_ms,
+            "ttft_ms": self.ttft_ms,
+            "decode_time_ms": self.decode_time_ms,
+            "generated_tokens": self.generated_tokens,
+            "tps": self.tps,
+            "safety_ms": self.safety_ms,
+            "used_streaming": self.used_streaming,
+            "fallback_reason": self.fallback_reason,
+        }
+
+
+def _estimate_token_count(text: str) -> int:
+    return len(re.findall(r"\S+", text))
 
 
 @dataclass(frozen=True)
@@ -58,6 +99,23 @@ class CognitionResult:
     raw_response: str
     parsed_json: dict
     validated_command: ValidatedCommand
+    vlm_profile: VLMProfile = field(default_factory=VLMProfile)
+
+    @property
+    def ttft_ms(self) -> float:
+        return self.vlm_profile.ttft_ms
+
+    @property
+    def decode_time_ms(self) -> float:
+        return self.vlm_profile.decode_time_ms
+
+    @property
+    def generated_tokens(self) -> int:
+        return self.vlm_profile.generated_tokens
+
+    @property
+    def tps(self) -> float:
+        return self.vlm_profile.tps
 
     @property
     def ok(self) -> bool:
@@ -71,6 +129,7 @@ class CognitionError:
     raw_response: str = ""
     parsed_json: Optional[dict] = None
     details: Optional[str] = None
+    vlm_profile: VLMProfile = field(default_factory=VLMProfile)
 
     @property
     def ok(self) -> bool:
@@ -107,6 +166,7 @@ class CognitionEngine:
         self._model = None
         self._processor = None
         self._mlx_generate = None
+        self._mlx_stream_generate = None
 
     def process_intent(
         self,
@@ -118,45 +178,59 @@ class CognitionEngine:
         raw_prompt = self._build_prompt(text_input, image_path=image_path, drone_state=drone_state)
         raw_response = ""
         parsed_json: Optional[dict] = None
+        vlm_profile = VLMProfile()
+        safety_started: Optional[float] = None
 
         try:
-            raw_response = self._generate(raw_prompt, image_path=image_path)
+            raw_response, vlm_profile = self._generate_profiled(raw_prompt, image_path=image_path)
+            safety_started = time.perf_counter()
             parsed_json = self._extract_json_object(raw_response)
             self._apply_hsv_guardrail(text_input, image_path, parsed_json)
             self._repair_missing_command_from_text(text_input, parsed_json, drone_state)
             self._repair_missing_target_fields(parsed_json)
+            self._drop_extra_command_fields(parsed_json)
             validated = self.validator.validate(
                 json.dumps(parsed_json, ensure_ascii=False, separators=(",", ":")),
                 drone_state=drone_state,
             )
+            vlm_profile.safety_ms = self._elapsed_ms(safety_started)
         except SafetyViolationError as exc:
+            if safety_started is not None:
+                vlm_profile.safety_ms = self._elapsed_ms(safety_started)
             error = CognitionError(
                 reason="VALIDATION_REJECTED",
                 raw_prompt=raw_prompt,
                 raw_response=raw_response,
                 parsed_json=parsed_json,
                 details=str(exc),
+                vlm_profile=vlm_profile,
             )
             self._log_transaction(raw_prompt, raw_response, parsed_json, error)
             return error
         except (ValueError, json.JSONDecodeError) as exc:
+            if safety_started is not None:
+                vlm_profile.safety_ms = self._elapsed_ms(safety_started)
             error = CognitionError(
                 reason="INVALID_JSON",
                 raw_prompt=raw_prompt,
                 raw_response=raw_response,
                 parsed_json=parsed_json,
                 details=str(exc),
+                vlm_profile=vlm_profile,
             )
             self._log_transaction(raw_prompt, raw_response, parsed_json, error)
             return error
         except Exception as exc:  # noqa: BLE001 - local inference failures must not block control.
             logger.exception("Cognition inference failed")
+            if safety_started is not None:
+                vlm_profile.safety_ms = self._elapsed_ms(safety_started)
             error = CognitionError(
                 reason="INFERENCE_ERROR",
                 raw_prompt=raw_prompt,
                 raw_response=raw_response,
                 parsed_json=parsed_json,
                 details=str(exc),
+                vlm_profile=vlm_profile,
             )
             self._log_transaction(raw_prompt, raw_response, parsed_json, error)
             return error
@@ -166,6 +240,7 @@ class CognitionEngine:
             raw_response=raw_response,
             parsed_json=parsed_json,
             validated_command=validated,
+            vlm_profile=vlm_profile,
         )
         self._log_transaction(raw_prompt, raw_response, parsed_json, result)
         return result
@@ -215,10 +290,48 @@ class CognitionEngine:
         )
 
     def _generate(self, raw_prompt: str, *, image_path: Optional[str]) -> str:
+        raw_response, _ = self._generate_profiled(raw_prompt, image_path=image_path)
+        return raw_response
+
+    def _generate_profiled(self, raw_prompt: str, *, image_path: Optional[str]) -> tuple[str, VLMProfile]:
         if self._external_generator is not None:
-            return self._external_generator(raw_prompt, image_path)
+            return self._generate_external_profiled(raw_prompt, image_path=image_path)
 
         self._load_local_model()
+        if self._mlx_stream_generate is not None:
+            try:
+                return self._stream_generate_profiled(raw_prompt, image_path=image_path)
+            except Exception as exc:  # noqa: BLE001 - stream APIs vary across mlx-vlm releases.
+                logger.warning("VLM streaming unavailable; falling back to batch generate: %s", exc)
+
+        return self._batch_generate_profiled(
+            raw_prompt,
+            image_path=image_path,
+            fallback_reason="stream_generate unavailable or failed",
+        )
+
+    def _generate_external_profiled(self, raw_prompt: str, *, image_path: Optional[str]) -> tuple[str, VLMProfile]:
+        started = time.perf_counter()
+        raw_response = self._external_generator(raw_prompt, image_path)
+        elapsed_ms = self._elapsed_ms(started)
+        generated_tokens = _estimate_token_count(raw_response)
+        return raw_response, VLMProfile(
+            ttft_ms=elapsed_ms,
+            decode_time_ms=0.0,
+            generated_tokens=generated_tokens,
+            tps=(generated_tokens / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0,
+            used_streaming=False,
+            fallback_reason="external generator is non-streaming",
+        )
+
+    def _batch_generate_profiled(
+        self,
+        raw_prompt: str,
+        *,
+        image_path: Optional[str],
+        fallback_reason: str,
+    ) -> tuple[str, VLMProfile]:
+        started = time.perf_counter()
         result = self._mlx_generate(
             self._model,
             self._processor,
@@ -228,7 +341,72 @@ class CognitionEngine:
             temperature=self.temperature,
             verbose=False,
         )
-        return result.text if hasattr(result, "text") else str(result)
+        elapsed_ms = self._elapsed_ms(started)
+        raw_response = result.text if hasattr(result, "text") else str(result)
+        generated_tokens = self._result_token_count(result, raw_response)
+        return raw_response, VLMProfile(
+            ttft_ms=elapsed_ms,
+            decode_time_ms=0.0,
+            generated_tokens=generated_tokens,
+            tps=(generated_tokens / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0,
+            used_streaming=False,
+            fallback_reason=fallback_reason,
+        )
+
+    def _stream_generate_profiled(self, raw_prompt: str, *, image_path: Optional[str]) -> tuple[str, VLMProfile]:
+        started = time.perf_counter()
+        first_token_at: Optional[float] = None
+        ended_at = started
+        parts: list[str] = []
+        generated_tokens = 0
+        final_token_count: Optional[int] = None
+        prompt_eval_ms: Optional[float] = None
+
+        for response in self._mlx_stream_generate(
+            self._model,
+            self._processor,
+            prompt=raw_prompt,
+            image=image_path,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            verbose=False,
+        ):
+            now = time.perf_counter()
+            if first_token_at is None:
+                first_token_at = now
+            ended_at = now
+            text = self._response_text(response)
+            if text:
+                parts.append(text)
+            generated_tokens += self._response_token_increment(response, text)
+            final_token_count = self._response_final_token_count(response, final_token_count)
+            prompt_eval_ms = self._response_prompt_eval_ms(response, prompt_eval_ms)
+
+        raw_response = "".join(parts)
+        if final_token_count is not None:
+            generated_tokens = max(generated_tokens, final_token_count)
+
+        if first_token_at is None:
+            elapsed_ms = self._elapsed_ms(started)
+            return raw_response, VLMProfile(
+                prompt_eval_ms=prompt_eval_ms,
+                ttft_ms=elapsed_ms,
+                decode_time_ms=0.0,
+                generated_tokens=generated_tokens,
+                tps=0.0,
+                used_streaming=True,
+            )
+
+        ttft_ms = (first_token_at - started) * 1000.0
+        decode_time_ms = max(0.0, (ended_at - first_token_at) * 1000.0)
+        return raw_response, VLMProfile(
+            prompt_eval_ms=prompt_eval_ms,
+            ttft_ms=ttft_ms,
+            decode_time_ms=decode_time_ms,
+            generated_tokens=generated_tokens,
+            tps=(generated_tokens / (decode_time_ms / 1000.0)) if decode_time_ms > 0 else 0.0,
+            used_streaming=True,
+        )
 
     def _load_local_model(self) -> None:
         if self._model is not None and self._processor is not None:
@@ -242,9 +420,79 @@ class CognitionEngine:
                 "Run: .venv/bin/python -m pip install -r requirements-phase4.txt"
             ) from exc
 
+        try:
+            from mlx_vlm import stream_generate
+        except ImportError:
+            try:
+                from mlx_vlm.generate import stream_generate  # type: ignore[no-redef]
+            except ImportError:
+                stream_generate = None
+
         logger.info("Loading local MLX-VLM model: %s", self.model_id)
         self._model, self._processor = load(self.model_id)
         self._mlx_generate = generate
+        self._mlx_stream_generate = stream_generate
+
+    @staticmethod
+    def _response_text(response: Any) -> str:
+        text = getattr(response, "text", None)
+        if text is not None:
+            return str(text)
+        if isinstance(response, tuple) and response:
+            return str(response[0])
+        return str(response)
+
+    @staticmethod
+    def _response_token_increment(response: Any, text: str) -> int:
+        if getattr(response, "token", None) is not None:
+            return 1
+        tokens = getattr(response, "tokens", None)
+        if tokens is not None:
+            try:
+                return len(tokens)
+            except TypeError:
+                return 1
+        return 1 if text else 0
+
+    @staticmethod
+    def _response_final_token_count(response: Any, current: Optional[int]) -> Optional[int]:
+        for attr in ("generation_tokens", "generated_tokens", "total_generated_tokens"):
+            value = getattr(response, attr, None)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return current
+
+    @staticmethod
+    def _response_prompt_eval_ms(response: Any, current: Optional[float]) -> Optional[float]:
+        for attr in ("prompt_eval_ms", "prompt_time_ms", "prompt_processing_ms"):
+            value = getattr(response, attr, None)
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return current
+
+    @staticmethod
+    def _result_token_count(result: Any, raw_response: str) -> int:
+        for attr in ("generation_tokens", "generated_tokens", "total_generated_tokens"):
+            value = getattr(result, attr, None)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return _estimate_token_count(raw_response)
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> float:
+        return (time.perf_counter() - started_at) * 1000.0
 
     def _extract_json_object(self, raw_response: str) -> dict:
         cleaned = raw_response.strip()
@@ -300,10 +548,6 @@ class CognitionEngine:
         if color == "head object":
             logger.warning("ASR_COLOR_ALIAS: treating 'head object' as likely 'red object'")
             return "red"
-        if color == "rosso":
-            return "red"
-        if color == "blu":
-            return "blue"
         return color
 
     @staticmethod
@@ -358,6 +602,24 @@ class CognitionEngine:
         parsed_json["reasoning"] = (
             "SAFETY_OVERRIDE: TARGET_NOT_FOUND. VLM omitted required target_found/reasoning fields."
         )
+
+    @staticmethod
+    def _drop_extra_command_fields(parsed_json: dict) -> None:
+        command = parsed_json.get("command")
+        if not isinstance(command, str):
+            return
+
+        allowed_fields = COMMAND_ALLOWED_FIELDS.get(command)
+        if allowed_fields is None:
+            return
+
+        extra_fields = sorted(field for field in parsed_json if field not in allowed_fields)
+        if not extra_fields:
+            return
+
+        logger.warning("SCHEMA_REPAIR: DROPPED_EXTRA_FIELDS | fields=%s", ",".join(extra_fields))
+        for field in extra_fields:
+            parsed_json.pop(field, None)
 
     @staticmethod
     def _infer_safe_non_motion_command(
@@ -536,7 +798,7 @@ class CognitionEngine:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     engine = CognitionEngine()
-    result = engine.process_intent("vai avanti a 1 metro al secondo mantenendo quota e yaw zero")
+    result = engine.process_intent("move forward at one meter per second while maintaining altitude and zero yaw")
     if not result.ok:
         raise SystemExit(1)
 
