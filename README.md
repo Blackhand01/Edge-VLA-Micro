@@ -225,7 +225,7 @@ emergency
 emergenza
 ```
 
-### 6. Generate Whitepaper Charts
+### 6. Generate Charts
 
 After collecting telemetry:
 
