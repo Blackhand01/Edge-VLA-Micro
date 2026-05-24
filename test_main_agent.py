@@ -7,7 +7,7 @@ from mavsdk.telemetry import FlightMode
 
 from cognition_engine import CognitionError, CognitionResult
 from command_validator import DroneOperationalState, HoldModel, LandModel, ValidatedCommand
-from main_agent import AgentLoop
+from main_agent import AgentLoop, AudioModule, DEFAULT_WHISPER_LANGUAGE, build_parser
 from vision_module import VisionError
 
 
@@ -83,6 +83,18 @@ class FakeVisionModule:
 
 
 class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_audio_defaults_to_english_transcription(self) -> None:
+        audio = AudioModule()
+
+        self.assertEqual(audio.language, DEFAULT_WHISPER_LANGUAGE)
+        self.assertEqual(audio.language, "en")
+
+    async def test_parser_defaults_to_english_transcription(self) -> None:
+        args = build_parser().parse_args([])
+
+        self.assertEqual(args.whisper_language, DEFAULT_WHISPER_LANGUAGE)
+        self.assertEqual(args.whisper_language, "en")
+
     async def test_iteration_executes_validated_command(self) -> None:
         command = ValidatedCommand(
             command=HoldModel(command="hold"),
@@ -178,7 +190,7 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cognition.calls, [])
         self.assertEqual(vision.capture_calls, 0)
 
-    async def test_iteration_rejects_vlm_command_not_supported_by_transcript(self) -> None:
+    async def test_iteration_executes_validated_vlm_command_without_transcript_evidence_gate(self) -> None:
         land_command = ValidatedCommand(
             command=LandModel(command="land"),
             raw={"command": "land"},
@@ -205,8 +217,8 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
 
         status = await agent.run_iteration()
 
-        self.assertEqual(controller.calls, ["hold"])
-        self.assertEqual(status.action, "HOLD:TRANSCRIPT_COMMAND_MISMATCH")
+        self.assertEqual(controller.calls, ["land"])
+        self.assertEqual(status.action, "EXECUTED:land")
 
     async def test_iteration_continues_text_only_when_vision_fails(self) -> None:
         command = ValidatedCommand(

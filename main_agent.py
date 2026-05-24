@@ -25,26 +25,16 @@ from vision_module import VisionError, VisionModule
 logger = logging.getLogger(__name__)
 
 EMERGENCY_KEYWORDS = ("stop", "emergency", "emergenza")
+DEFAULT_WHISPER_LANGUAGE = "en"
 EMERGENCY_PATTERN = re.compile(r"\b(stop|emergency|emergenza)\b", re.IGNORECASE)
 ACTIONABLE_PATTERN = re.compile(
     r"\b("
     r"arm|armed|disarm|take\s*off|takeoff|launch|land|hold|hover|"
-    r"move|forward|backward|left|right|red|object|target|"
+    r"move|forward|backward|left|right|red|object|target|drone|"
     r"mantieni|posizione|vai|avanti"
     r")\b",
     re.IGNORECASE,
 )
-COMMAND_EVIDENCE_PATTERNS = {
-    "arm": re.compile(r"(?<!dis)\barm(?:ed|ing)?\b|\barma(?:re)?\b", re.IGNORECASE),
-    "disarm": re.compile(r"\bdisarm(?:ed|ing)?\b|\bdisarma(?:re)?\b", re.IGNORECASE),
-    "takeoff": re.compile(r"\btake\s*off\b|\btakeoff\b|\blaunch\b|\bdecol(?:la|lo|lare)\b", re.IGNORECASE),
-    "land": re.compile(r"\bland(?:ing)?\b|\batterr(?:a|are|aggio)\b", re.IGNORECASE),
-    "hold": re.compile(r"\bhold\b|\bhover\b|\bmantieni\b|\bposizione\b", re.IGNORECASE),
-    "move_velocity": re.compile(
-        r"\bmove\b|\bforward\b|\bbackward\b|\bleft\b|\bright\b|\bred\b|\bobject\b|\btarget\b|\bavanti\b",
-        re.IGNORECASE,
-    ),
-}
 
 
 @dataclass(frozen=True)
@@ -65,13 +55,13 @@ class AudioModule:
         self,
         *,
         model_size: str = "tiny",
-        language: str = "it",
+        language: str = DEFAULT_WHISPER_LANGUAGE,
         sample_rate: int = 16_000,
         block_duration_s: float = 0.10,
         listen_timeout_s: float = 2.0,
         max_record_s: float = 5.0,
         min_record_s: float = 0.30,
-        silence_threshold: float = 0.012,
+        silence_threshold: float = 0.006,
         trailing_silence_s: float = 0.80,
         device: Optional[str] = None,
     ) -> None:
@@ -342,22 +332,6 @@ class AgentLoop:
 
             assert isinstance(cognition_result, CognitionResult)
             command = cognition_result.validated_command
-            if not self._command_has_transcript_evidence(command.name, spoken_text):
-                logger.warning(
-                    "Command rejected after VLM: command=%s transcript=%r",
-                    command.name,
-                    spoken_text,
-                )
-                action = await self._safe_hold("TRANSCRIPT_COMMAND_MISMATCH")
-                return self._emit_status(
-                    input_text=spoken_text,
-                    action=action,
-                    started_at=start,
-                    audio_ms=audio_ms,
-                    vision_ms=vision_ms,
-                    vlm_ms=vlm_ms,
-                )
-
             self._consecutive_cognition_failures = 0
             action = await self._dispatch_command(command)
             return self._emit_status(
@@ -499,14 +473,6 @@ class AgentLoop:
         return compact
 
     @staticmethod
-    def _command_has_transcript_evidence(command_name: str, transcript: str) -> bool:
-        pattern = COMMAND_EVIDENCE_PATTERNS.get(command_name)
-        if pattern is None:
-            return False
-
-        return pattern.search(transcript) is not None
-
-    @staticmethod
     def _elapsed_ms(started_at: float) -> float:
         return (time.perf_counter() - started_at) * 1000.0
 
@@ -515,11 +481,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Main async agent loop: audio -> cognition -> safety -> drone action.")
     parser.add_argument("--connection", default=DEFAULT_CONNECTION, help=f"MAVSDK connection string. Default: {DEFAULT_CONNECTION}")
     parser.add_argument("--whisper-model", default="tiny", help="faster-whisper model size (tiny, base, ...).")
-    parser.add_argument("--whisper-language", default="it", help="Whisper language code.")
+    parser.add_argument(
+        "--whisper-language",
+        default=DEFAULT_WHISPER_LANGUAGE,
+        help="Whisper language code. Default is English because live voice commands are expected in English.",
+    )
     parser.add_argument("--audio-device", default=None, help="Optional sounddevice input device.")
     parser.add_argument("--camera-index", default=0, type=int, help="OpenCV camera index.")
     parser.add_argument("--frame-path", default="tmp/frame.jpg", help="Path for the one-shot camera frame.")
     parser.add_argument("--sample-rate", default=16_000, type=int, help="Microphone sample rate.")
+    parser.add_argument("--silence-threshold", default=0.006, type=float, help="RMS threshold used to start voice capture.")
+    parser.add_argument("--trailing-silence", default=0.80, type=float, help="Seconds of silence used to end a voice command.")
+    parser.add_argument("--max-record", default=5.0, type=float, help="Maximum seconds to record a single voice command.")
     parser.add_argument("--cognition-model", default=DEFAULT_MODEL_ID, help="MLX model id for CognitionEngine.")
     parser.add_argument("--max-cognition-failures", default=3, type=int, help="Consecutive cognition failures before emergency hold.")
     return parser
@@ -543,6 +516,9 @@ async def run_agent(args: argparse.Namespace) -> None:
         model_size=args.whisper_model,
         language=args.whisper_language,
         sample_rate=args.sample_rate,
+        silence_threshold=args.silence_threshold,
+        trailing_silence_s=args.trailing_silence,
+        max_record_s=args.max_record,
         device=args.audio_device,
     )
     vision_module = VisionModule(
