@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.perception.vision_module import VisionError, VisionModule
+from src.perception.vision_module import VisionError, VisionModule, capture_and_downsample
 
 
 class FakeCapture:
@@ -26,7 +26,7 @@ class FakeCapture:
 
     def read(self):
         self.read_calls += 1
-        return True, np.zeros((4, 4, 3), dtype=np.uint8)
+        return True, np.zeros((4, 6, 3), dtype=np.uint8)
 
     def release(self) -> None:
         self.released = True
@@ -42,6 +42,8 @@ class VisionModuleTests(unittest.IsolatedAsyncioTestCase):
             fake_cv2 = types.SimpleNamespace(
                 VideoCapture=lambda index: FakeCapture(index),
                 imwrite=lambda path, frame: Path(path).write_bytes(b"jpg") > 0,
+                resize=lambda frame, target_size, interpolation=None: np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8),
+                INTER_AREA=3,
             )
             sys.modules["cv2"] = fake_cv2
 
@@ -67,6 +69,8 @@ class VisionModuleTests(unittest.IsolatedAsyncioTestCase):
             fake_cv2 = types.SimpleNamespace(
                 VideoCapture=lambda index: FakeCapture(index),
                 imwrite=lambda path, frame: Path(path).write_bytes(b"jpg") > 0,
+                resize=lambda frame, target_size, interpolation=None: np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8),
+                INTER_AREA=3,
             )
             sys.modules["cv2"] = fake_cv2
 
@@ -84,6 +88,8 @@ class VisionModuleTests(unittest.IsolatedAsyncioTestCase):
         fake_cv2 = types.SimpleNamespace(
             VideoCapture=lambda index: FakeCapture(index, opened=False),
             imwrite=lambda path, frame: True,
+            resize=lambda frame, target_size, interpolation=None: frame,
+            INTER_AREA=3,
         )
         sys.modules["cv2"] = fake_cv2
 
@@ -93,6 +99,27 @@ class VisionModuleTests(unittest.IsolatedAsyncioTestCase):
             await module.capture_single_frame()
 
         self.assertTrue(FakeCapture.last_instance.released)
+
+    async def test_capture_and_downsample_center_crops_before_resize(self) -> None:
+        observed: dict[str, np.ndarray] = {}
+
+        def resize(frame, target_size, interpolation=None):
+            del interpolation
+            observed["crop"] = frame.copy()
+            return np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8)
+
+        fake_cv2 = types.SimpleNamespace(resize=resize, INTER_AREA=3)
+        sys.modules["cv2"] = fake_cv2
+        frame = np.zeros((4, 6, 3), dtype=np.uint8)
+        for column in range(6):
+            frame[:, column, :] = column
+
+        resized = capture_and_downsample(frame, target_size=(2, 2))
+
+        self.assertEqual(resized.shape, (2, 2, 3))
+        self.assertEqual(observed["crop"].shape, (4, 4, 3))
+        self.assertTrue(np.all(observed["crop"][:, 0, :] == 1))
+        self.assertTrue(np.all(observed["crop"][:, -1, :] == 4))
 
 
 if __name__ == "__main__":

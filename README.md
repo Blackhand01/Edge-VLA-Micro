@@ -9,6 +9,16 @@ Edge-VLA-Micro is an asynchronous orchestration layer for edge autonomy that fus
 
 The current implementation has been validated against PX4 SITL with jMAVSim, QGroundControl, live ASR, OpenCV frame capture, MLX-VLM inference, MAVSDK command dispatch, blackbox telemetry, and per-run industrial latency logging.
 
+## Demo Video
+
+The OBS recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGroundControl, voice intent parsing, FPV frame capture, VLM reasoning, deterministic guardrails, and MAVSDK command dispatch.
+
+<video src="docs/vla-edge.mov" controls width="100%">
+  Edge-VLA-Micro OBS demo: docs/vla-edge.mov
+</video>
+
+If the embedded player is not rendered by the viewer, open the recording directly: [docs/vla-edge.mov](docs/vla-edge.mov).
+
 ## System Architecture
 
 ```mermaid
@@ -93,11 +103,44 @@ Observed averages from the current SITL run:
 | Safety Guardrail (Pydantic + HSV) | ~36.9 ms |
 | ASR + TTFT Bottleneck Share | ~85.8% |
 
-The key systems result is that the symbolic safety layer is not the bottleneck. Pydantic validation plus HSV target gating completes in approximately 11 ms, while ASR and TTFT dominate the control cycle. This supports the architectural decision to preserve deterministic guardrails while focusing optimization work on model-serving latency.
+The key systems result is that the symbolic safety layer is not the bottleneck. Pydantic validation plus HSV target gating remains small relative to ASR and VLM prefill, while ASR and TTFT dominate the control cycle. This supports the architectural decision to preserve deterministic guardrails while focusing optimization work on model-serving latency.
 
 ![Average control-loop latency breakdown](docs/latency_pie_chart.png)
 
 ![VLM decode throughput per inference run](docs/tps_bar_chart.png)
+
+### Vision Pipeline Optimization Benchmark
+
+The current perception path performs deterministic center-crop and aggressive downsampling before VLM inference. The benchmark isolates the effect of image resolution on Qwen2-VL prompt evaluation by comparing a full-resolution `1920x1080` frame against the optimized `224x224` VLM input.
+
+The true `bf16` baseline depends on downloading `mlx-community/Qwen2-VL-2B-Instruct-bf16`, which can fail under Hugging Face rate limits or transient network resets. When that baseline is unavailable, the benchmark automatically falls back to a controlled comparison using the same 4-bit model for both paths. This separates network/model-cache availability from the actual vision-pipeline optimization.
+
+Latest local A/B result:
+
+| Case | Image | Model | TTFT | Decode | Tokens | TPS | Result |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
+| Baseline 4-bit Full-Res | 1920x1080 | Qwen2-VL-2B 4-bit | 1236.2 ms | 947.9 ms | 49 | 51.69 | Reference |
+| Optimized | 224x224 | Qwen2-VL-2B 4-bit | 424.8 ms | 972.1 ms | 49 | 50.41 | 65.6% lower TTFT |
+
+This result confirms that the primary gain is in the vision/prompt-evaluation phase. Decode throughput remains effectively unchanged, while TTFT drops by roughly two thirds. This is the exact bottleneck the TensorRT roadmap targets for the Jetson deployment path.
+
+Run the benchmark:
+
+```bash
+.venv/bin/python scripts/benchmark_optimization.py --case-timeout 300 --max-tokens 48
+```
+
+Force the downsampling-only comparison without attempting the large `bf16` baseline download:
+
+```bash
+.venv/bin/python scripts/benchmark_optimization.py --case-timeout 300 --max-tokens 48 --minimum-free-gb 999
+```
+
+Require the true `bf16` baseline and disable fallback:
+
+```bash
+.venv/bin/python scripts/benchmark_optimization.py --case-timeout 300 --max-tokens 48 --no-baseline-fallback
+```
 
 ### TensorRT Migration Target
 
@@ -105,6 +148,7 @@ The next deployment target is NVIDIA Jetson Orin Nano. The architecture is inten
 
 Roadmap objectives:
 
+- Preserve the deterministic center-crop/downsample preprocessing contract as the VLM input boundary.
 - Export or convert the selected VLM path into an optimized TensorRT engine.
 - Quantize to INT8 where acceptable under validation tests.
 - Reduce TTFT by moving prompt evaluation into a compiled GPU execution path.

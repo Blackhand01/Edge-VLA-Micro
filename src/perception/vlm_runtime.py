@@ -5,7 +5,7 @@ import time
 from typing import Any, Optional
 
 from src.perception.models import GeneratorFn, VLMProfile, estimate_generated_token_count
-from src.perception.prompts import DEFAULT_MODEL_ID
+from src.perception.prompts import DEFAULT_MODEL_ID, DEFAULT_QUANTIZED_MODEL_ID
 
 
 logger = logging.getLogger(__name__)
@@ -19,11 +19,18 @@ class VLMRuntime:
         max_tokens: int = 128,
         temperature: float = 0.0,
         external_generator: Optional[GeneratorFn] = None,
+        prefer_quantized: bool = True,
+        quantized_model_id: str = DEFAULT_QUANTIZED_MODEL_ID,
+        quantize_on_load: bool = False,
     ) -> None:
-        self.model_id = model_id
+        self.requested_model_id = model_id
+        self.model_id = resolve_model_id(model_id, prefer_quantized, quantized_model_id)
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.external_generator = external_generator
+        self.prefer_quantized = prefer_quantized
+        self.quantized_model_id = quantized_model_id
+        self.quantize_on_load = quantize_on_load
         self.model = None
         self.processor = None
         self.batch_generate = None
@@ -140,8 +147,12 @@ class VLMRuntime:
             return
         try:
             from mlx_vlm import generate, load
-        except ImportError as exc:
-            raise RuntimeError("mlx-vlm is not installed. Install dependencies from requirements.txt") from exc
+        except Exception as exc:
+            raise RuntimeError(
+                "Unable to import the MLX-VLM runtime. Reinstall the pinned dependencies with "
+                "`python -m pip install -r requirements.txt`. "
+                f"Original import error: {type(exc).__name__}: {exc}"
+            ) from exc
         try:
             from mlx_vlm import stream_generate
         except ImportError:
@@ -152,8 +163,59 @@ class VLMRuntime:
 
         logger.info("Loading local MLX-VLM model: %s", self.model_id)
         self.model, self.processor = load(self.model_id)
+        if self.quantize_on_load:
+            self.apply_on_the_fly_quantization()
+        self.force_float16_for_supported_layers()
         self.batch_generate = generate
         self.stream_generate = stream_generate
+
+    def apply_on_the_fly_quantization(self) -> None:
+        try:
+            import mlx.nn as nn  # pylint: disable=import-outside-toplevel
+        except ImportError:
+            logger.warning("MLX nn module unavailable; skipping on-the-fly 4-bit quantization.")
+            return
+        quantize = getattr(nn, "quantize", None)
+        if quantize is None:
+            logger.warning("MLX nn.quantize unavailable; skipping on-the-fly 4-bit quantization.")
+            return
+        try:
+            self.model = quantize(self.model, bits=4)
+            logger.info("Applied on-the-fly MLX 4-bit quantization.")
+        except TypeError:
+            quantize(self.model, bits=4)
+            logger.info("Applied in-place MLX 4-bit quantization.")
+
+    def force_float16_for_supported_layers(self) -> None:
+        try:
+            import mlx.core as mx  # pylint: disable=import-outside-toplevel
+        except ImportError:
+            return
+        dtype = getattr(mx, "float16", None)
+        if dtype is None:
+            return
+        for method_name in ("to", "set_dtype", "astype"):
+            method = getattr(self.model, method_name, None)
+            if method is None:
+                continue
+            try:
+                converted = method(dtype)
+                if converted is not None:
+                    self.model = converted
+                logger.info("Configured supported non-quantized VLM layers for float16.")
+                return
+            except (TypeError, AttributeError, ValueError):
+                continue
+
+
+def resolve_model_id(model_id: str, prefer_quantized: bool, quantized_model_id: str) -> str:
+    if not prefer_quantized:
+        return model_id
+    lowered = model_id.lower()
+    if "4bit" in lowered or "4-bit" in lowered or "int4" in lowered:
+        return model_id
+    logger.info("Using 4-bit MLX-VLM model variant: %s -> %s", model_id, quantized_model_id)
+    return quantized_model_id
 
 
 def build_stream_profile(started, first_token_at, ended_at, raw_response, generated_tokens, final_count, prompt_eval_ms):

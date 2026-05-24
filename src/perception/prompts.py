@@ -7,7 +7,9 @@ from typing import Optional
 from src.safety.command_validator import ActionCommand, DroneStateSnapshot
 
 
-DEFAULT_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+DEFAULT_BASE_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-bf16"
+DEFAULT_QUANTIZED_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+DEFAULT_MODEL_ID = DEFAULT_QUANTIZED_MODEL_ID
 SAFE_COMMAND_PATTERNS = (
     ("disarm", re.compile(r"\bdisarm\b", re.IGNORECASE)),
     ("takeoff", re.compile(r"\b(take\s*off|takeoff|launch)\b", re.IGNORECASE)),
