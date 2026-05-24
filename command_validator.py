@@ -24,6 +24,7 @@ class SafetyViolationError(ValueError):
 
 class DroneOperationalState(str, Enum):
     GROUNDED = "GROUNDED"
+    LANDED = "LANDED"
     ARMED = "ARMED"
     AIRBORNE = "AIRBORNE"
     OFFBOARD = "OFFBOARD"
@@ -40,6 +41,14 @@ class DroneStateSnapshot(BaseModel):
 
 class CommandModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class ArmModel(CommandModel):
+    command: Literal["arm"]
+
+
+class DisarmModel(CommandModel):
+    command: Literal["disarm"]
 
 
 class TakeoffModel(CommandModel):
@@ -63,7 +72,7 @@ class MoveVelocityModel(CommandModel):
 
 
 CommandPayload = Annotated[
-    Union[TakeoffModel, LandModel, HoldModel, MoveVelocityModel],
+    Union[ArmModel, DisarmModel, TakeoffModel, LandModel, HoldModel, MoveVelocityModel],
     Field(discriminator="command"),
 ]
 
@@ -144,7 +153,7 @@ class CommandValidator:
             self._reject("Business rule failed", ["drone is not connected"])
 
         if state.battery_remaining is not None and state.battery_remaining < self.min_battery_remaining:
-            if not isinstance(command, LandModel):
+            if not isinstance(command, (LandModel, DisarmModel)):
                 self._reject(
                     "Business rule failed",
                     [f"battery below mission threshold: {state.battery_remaining:.0%}"],
@@ -160,6 +169,15 @@ class CommandValidator:
             )
 
     def _allowed_states_for(self, command: CommandPayload) -> set[DroneOperationalState]:
+        if isinstance(command, ArmModel):
+            return {DroneOperationalState.GROUNDED}
+
+        if isinstance(command, DisarmModel):
+            return {
+                DroneOperationalState.GROUNDED,
+                DroneOperationalState.LANDED,
+            }
+
         if isinstance(command, TakeoffModel):
             return {DroneOperationalState.ARMED}
 

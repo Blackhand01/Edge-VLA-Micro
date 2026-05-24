@@ -196,6 +196,28 @@ class DroneController:
         await self._wait_until(lambda: self.state.armed is True, self.timeout_s, "arm confirmation timeout")
         logger.info("Vehicle armed")
 
+    async def disarm(self) -> None:
+        await self._require_connected()
+
+        if not self.state.armed:
+            logger.info("Disarm skipped: vehicle is already disarmed")
+            return
+
+        await self._wait_until(lambda: self.state.in_air is not None, self.timeout_s, "in-air state timeout")
+
+        if self.state.in_air:
+            raise DroneStateError("disarm requires a landed vehicle")
+
+        logger.info("Disarming vehicle")
+
+        try:
+            await self.drone.action.disarm()
+        except ActionError as exc:
+            raise DroneStateError(f"disarm failed: {exc}") from exc
+
+        await self._wait_until(lambda: self.state.armed is False, self.timeout_s, "disarm confirmation timeout")
+        logger.info("Vehicle disarmed")
+
     async def takeoff(self) -> None:
         await self._require_connected()
         await self._require_armed("takeoff")

@@ -19,12 +19,32 @@ from command_validator import (
     ValidatedCommand,
 )
 from drone_controller import DEFAULT_CONNECTION, DroneController, DroneStateError
+from vision_module import VisionError, VisionModule
 
 
 logger = logging.getLogger(__name__)
 
 EMERGENCY_KEYWORDS = ("stop", "emergency", "emergenza")
 EMERGENCY_PATTERN = re.compile(r"\b(stop|emergency|emergenza)\b", re.IGNORECASE)
+ACTIONABLE_PATTERN = re.compile(
+    r"\b("
+    r"arm|armed|disarm|take\s*off|takeoff|launch|land|hold|hover|"
+    r"move|forward|backward|left|right|red|object|target|"
+    r"mantieni|posizione|vai|avanti"
+    r")\b",
+    re.IGNORECASE,
+)
+COMMAND_EVIDENCE_PATTERNS = {
+    "arm": re.compile(r"(?<!dis)\barm(?:ed|ing)?\b|\barma(?:re)?\b", re.IGNORECASE),
+    "disarm": re.compile(r"\bdisarm(?:ed|ing)?\b|\bdisarma(?:re)?\b", re.IGNORECASE),
+    "takeoff": re.compile(r"\btake\s*off\b|\btakeoff\b|\blaunch\b|\bdecol(?:la|lo|lare)\b", re.IGNORECASE),
+    "land": re.compile(r"\bland(?:ing)?\b|\batterr(?:a|are|aggio)\b", re.IGNORECASE),
+    "hold": re.compile(r"\bhold\b|\bhover\b|\bmantieni\b|\bposizione\b", re.IGNORECASE),
+    "move_velocity": re.compile(
+        r"\bmove\b|\bforward\b|\bbackward\b|\bleft\b|\bright\b|\bred\b|\bobject\b|\btarget\b|\bavanti\b",
+        re.IGNORECASE,
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -32,7 +52,10 @@ class LoopStatus:
     state: str
     input_text: str
     action: str
-    latency_ms: float
+    audio_ms: float
+    vision_ms: float
+    vlm_ms: float
+    total_latency_ms: float
 
 
 class AudioModule:
@@ -202,16 +225,19 @@ class AgentLoop:
         drone_controller: DroneController,
         cognition_engine: CognitionEngine,
         audio_module: AudioModule,
+        vision_module: VisionModule,
         max_cognition_failures: int = 3,
         idle_sleep_s: float = 0.10,
     ) -> None:
         self.drone_controller = drone_controller
         self.cognition_engine = cognition_engine
         self.audio_module = audio_module
+        self.vision_module = vision_module
         self.max_cognition_failures = max(1, max_cognition_failures)
         self.idle_sleep_s = idle_sleep_s
         self._consecutive_cognition_failures = 0
         self._shutdown_done = False
+        self._has_been_airborne = False
 
     async def run(self) -> None:
         try:
@@ -231,15 +257,23 @@ class AgentLoop:
         start = time.perf_counter()
         spoken_text = None
         action = "IDLE"
+        audio_ms = 0.0
+        vision_ms = 0.0
+        vlm_ms = 0.0
 
         try:
+            audio_started = time.perf_counter()
             spoken_text = await transcribe_audio(self.audio_module)
+            audio_ms = self._elapsed_ms(audio_started)
             if spoken_text is None:
                 await asyncio.sleep(self.idle_sleep_s)
                 return self._emit_status(
                     input_text="<silence>",
                     action=action,
                     started_at=start,
+                    audio_ms=audio_ms,
+                    vision_ms=vision_ms,
+                    vlm_ms=vlm_ms,
                 )
 
             if EMERGENCY_PATTERN.search(spoken_text):
@@ -249,14 +283,40 @@ class AgentLoop:
                     input_text=spoken_text,
                     action=action,
                     started_at=start,
+                    audio_ms=audio_ms,
+                    vision_ms=vision_ms,
+                    vlm_ms=vlm_ms,
                 )
 
+            if not ACTIONABLE_PATTERN.search(spoken_text):
+                return self._emit_status(
+                    input_text=spoken_text,
+                    action="IGNORED:NON_ACTIONABLE_AUDIO",
+                    started_at=start,
+                    audio_ms=audio_ms,
+                    vision_ms=vision_ms,
+                    vlm_ms=vlm_ms,
+                )
+
+            image_path = None
+            vision_started = time.perf_counter()
+            try:
+                frame = await self.vision_module.capture_single_frame()
+                image_path = frame.image_path
+            except VisionError as exc:
+                logger.warning("Vision capture failed; continuing text-only: %s", exc)
+            finally:
+                vision_ms = self._elapsed_ms(vision_started)
+
             drone_state = self._build_drone_snapshot()
+            vlm_started = time.perf_counter()
             cognition_result = await asyncio.to_thread(
                 self.cognition_engine.process_intent,
                 spoken_text,
+                image_path,
                 drone_state=drone_state,
             )
+            vlm_ms = self._elapsed_ms(vlm_started)
 
             if isinstance(cognition_result, CognitionError):
                 self._consecutive_cognition_failures += 1
@@ -275,15 +335,38 @@ class AgentLoop:
                     input_text=spoken_text,
                     action=action,
                     started_at=start,
+                    audio_ms=audio_ms,
+                    vision_ms=vision_ms,
+                    vlm_ms=vlm_ms,
                 )
 
             assert isinstance(cognition_result, CognitionResult)
+            command = cognition_result.validated_command
+            if not self._command_has_transcript_evidence(command.name, spoken_text):
+                logger.warning(
+                    "Command rejected after VLM: command=%s transcript=%r",
+                    command.name,
+                    spoken_text,
+                )
+                action = await self._safe_hold("TRANSCRIPT_COMMAND_MISMATCH")
+                return self._emit_status(
+                    input_text=spoken_text,
+                    action=action,
+                    started_at=start,
+                    audio_ms=audio_ms,
+                    vision_ms=vision_ms,
+                    vlm_ms=vlm_ms,
+                )
+
             self._consecutive_cognition_failures = 0
-            action = await self._dispatch_command(cognition_result.validated_command)
+            action = await self._dispatch_command(command)
             return self._emit_status(
                 input_text=spoken_text,
                 action=action,
                 started_at=start,
+                audio_ms=audio_ms,
+                vision_ms=vision_ms,
+                vlm_ms=vlm_ms,
             )
         except Exception:
             logger.exception("Agent loop iteration failed")
@@ -292,6 +375,9 @@ class AgentLoop:
                 input_text=spoken_text or "<error>",
                 action=action,
                 started_at=start,
+                audio_ms=audio_ms,
+                vision_ms=vision_ms,
+                vlm_ms=vlm_ms,
             )
 
     async def shutdown(self) -> None:
@@ -308,11 +394,12 @@ class AgentLoop:
                 try:
                     await self.drone_controller.land()
                     logger.info("Safe shutdown: land command sent")
-                except DroneStateError as exc:
+                except Exception as exc:  # noqa: BLE001 - shutdown must not mask the live-run result.
                     logger.warning("Safe shutdown landing skipped: %s", exc)
         finally:
             await self.drone_controller.close()
             await self.audio_module.close()
+            await self.vision_module.close()
 
     async def _dispatch_command(self, command: ValidatedCommand) -> str:
         method_name = command.controller_method
@@ -340,6 +427,9 @@ class AgentLoop:
         flight_mode = self.drone_controller.state.flight_mode
         battery = self.drone_controller.state.battery
 
+        if in_air:
+            self._has_been_airborne = True
+
         battery_remaining = None
         if battery is not None:
             battery_remaining = float(battery.remaining_percent)
@@ -355,6 +445,8 @@ class AgentLoop:
             state = DroneOperationalState.LANDING
         elif in_air:
             state = DroneOperationalState.AIRBORNE
+        elif armed and (flight_mode == FlightMode.LAND or self._has_been_airborne):
+            state = DroneOperationalState.LANDED
         elif armed:
             state = DroneOperationalState.ARMED
         else:
@@ -366,22 +458,37 @@ class AgentLoop:
             battery_remaining=battery_remaining,
         )
 
-    def _emit_status(self, *, input_text: str, action: str, started_at: float) -> LoopStatus:
+    def _emit_status(
+        self,
+        *,
+        input_text: str,
+        action: str,
+        started_at: float,
+        audio_ms: float,
+        vision_ms: float,
+        vlm_ms: float,
+    ) -> LoopStatus:
         state = self._build_drone_snapshot().state.value
-        latency_ms = (time.perf_counter() - started_at) * 1000.0
+        total_latency_ms = self._elapsed_ms(started_at)
         compact_input = self._compact_text(input_text)
         line = (
             f"[STATE] {state} | "
             f"[INPUT] {compact_input} | "
             f"[ACTION] {action} | "
-            f"[LATENCY] {latency_ms:.1f}ms"
+            f"[AUDIO_MS] {audio_ms:.1f} | "
+            f"[VISION_MS] {vision_ms:.1f} | "
+            f"[VLM_MS] {vlm_ms:.1f} | "
+            f"[TOTAL_LATENCY] {total_latency_ms:.1f}ms"
         )
         print(line, flush=True)
         return LoopStatus(
             state=state,
             input_text=compact_input,
             action=action,
-            latency_ms=latency_ms,
+            audio_ms=audio_ms,
+            vision_ms=vision_ms,
+            vlm_ms=vlm_ms,
+            total_latency_ms=total_latency_ms,
         )
 
     @staticmethod
@@ -391,6 +498,18 @@ class AgentLoop:
             return compact[:117] + "..."
         return compact
 
+    @staticmethod
+    def _command_has_transcript_evidence(command_name: str, transcript: str) -> bool:
+        pattern = COMMAND_EVIDENCE_PATTERNS.get(command_name)
+        if pattern is None:
+            return False
+
+        return pattern.search(transcript) is not None
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> float:
+        return (time.perf_counter() - started_at) * 1000.0
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Main async agent loop: audio -> cognition -> safety -> drone action.")
@@ -398,6 +517,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--whisper-model", default="tiny", help="faster-whisper model size (tiny, base, ...).")
     parser.add_argument("--whisper-language", default="it", help="Whisper language code.")
     parser.add_argument("--audio-device", default=None, help="Optional sounddevice input device.")
+    parser.add_argument("--camera-index", default=0, type=int, help="OpenCV camera index.")
+    parser.add_argument("--frame-path", default="tmp/frame.jpg", help="Path for the one-shot camera frame.")
     parser.add_argument("--sample-rate", default=16_000, type=int, help="Microphone sample rate.")
     parser.add_argument("--cognition-model", default=DEFAULT_MODEL_ID, help="MLX model id for CognitionEngine.")
     parser.add_argument("--max-cognition-failures", default=3, type=int, help="Consecutive cognition failures before emergency hold.")
@@ -424,10 +545,15 @@ async def run_agent(args: argparse.Namespace) -> None:
         sample_rate=args.sample_rate,
         device=args.audio_device,
     )
+    vision_module = VisionModule(
+        camera_index=args.camera_index,
+        output_path=args.frame_path,
+    )
     agent = AgentLoop(
         drone_controller=controller,
         cognition_engine=cognition_engine,
         audio_module=audio_module,
+        vision_module=vision_module,
         max_cognition_failures=args.max_cognition_failures,
     )
     await agent.run()

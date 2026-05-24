@@ -117,6 +117,48 @@ class CommandValidatorTests(unittest.TestCase):
 
         self.assertEqual(validated.controller_method, "takeoff")
 
+    def test_accepts_arm_only_when_grounded(self) -> None:
+        validator = CommandValidator(
+            DroneStateSnapshot(
+                state=DroneOperationalState.GROUNDED,
+                connected=True,
+                battery_remaining=0.95,
+            )
+        )
+
+        validated = validator.validate('{"command": "arm"}')
+
+        self.assertEqual(validated.controller_method, "arm")
+
+        with self.assertRaises(SafetyViolationError) as ctx:
+            self.airborne_validator.validate('{"command": "arm"}')
+
+        self.assertIn("arm not allowed while AIRBORNE", str(ctx.exception))
+
+    def test_accepts_disarm_when_grounded_or_landed(self) -> None:
+        grounded_validator = CommandValidator(
+            DroneStateSnapshot(
+                state=DroneOperationalState.GROUNDED,
+                connected=True,
+                battery_remaining=0.95,
+            )
+        )
+        landed_validator = CommandValidator(
+            DroneStateSnapshot(
+                state=DroneOperationalState.LANDED,
+                connected=True,
+                battery_remaining=0.10,
+            )
+        )
+
+        self.assertEqual(grounded_validator.validate('{"command": "disarm"}').controller_method, "disarm")
+        self.assertEqual(landed_validator.validate('{"command": "disarm"}').controller_method, "disarm")
+
+        with self.assertRaises(SafetyViolationError) as ctx:
+            self.airborne_validator.validate('{"command": "disarm"}')
+
+        self.assertIn("disarm not allowed while AIRBORNE", str(ctx.exception))
+
     def test_rejects_non_land_when_battery_low(self) -> None:
         validator = CommandValidator(
             DroneStateSnapshot(

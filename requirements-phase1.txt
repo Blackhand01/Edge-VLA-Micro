@@ -1,2 +1,0 @@
--r requirements-phase0.txt
-pydantic>=2,<3

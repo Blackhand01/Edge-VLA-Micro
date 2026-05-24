@@ -30,7 +30,7 @@ class CognitionEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(
                 validator=_airborne_validator(),
-                generator=lambda _: '{"command":"hold"}',
+                generator=lambda _, image_path: '{"command":"hold"}',
                 log_path=Path(tmpdir) / "cognition.log",
             )
 
@@ -51,7 +51,7 @@ class CognitionEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(
                 validator=_airborne_validator(),
-                generator=lambda _: response,
+                generator=lambda _, image_path: response,
                 log_path=Path(tmpdir) / "cognition.log",
             )
 
@@ -67,7 +67,7 @@ class CognitionEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(
                 validator=_airborne_validator(),
-                generator=lambda _: "non posso aiutarti",
+                generator=lambda _, image_path: "non posso aiutarti",
                 log_path=Path(tmpdir) / "cognition.log",
             )
 
@@ -81,7 +81,7 @@ class CognitionEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(
                 validator=_airborne_validator(),
-                generator=lambda _: (
+                generator=lambda _, image_path: (
                     '{"command":"move_velocity","velocity_x":500,'
                     '"velocity_y":0,"velocity_z":0,"yaw_deg":0}'
                 ),
@@ -99,7 +99,7 @@ class CognitionEngineTests(unittest.TestCase):
             log_path = Path(tmpdir) / "logs" / "cognition.log"
             engine = CognitionEngine(
                 validator=_airborne_validator(),
-                generator=lambda _: '{"command":"land"}',
+                generator=lambda _, image_path: '{"command":"land"}',
                 log_path=log_path,
             )
 
@@ -115,7 +115,7 @@ class CognitionEngineTests(unittest.TestCase):
     def test_process_intent_accepts_live_drone_state_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             engine = CognitionEngine(
-                generator=lambda _: '{"command":"hold"}',
+                generator=lambda _, image_path: '{"command":"hold"}',
                 log_path=Path(tmpdir) / "cognition.log",
             )
 
@@ -131,6 +131,56 @@ class CognitionEngineTests(unittest.TestCase):
 
             self.assertIsInstance(result, CognitionResult)
             self.assertEqual(result.validated_command.name, "hold")
+
+    def test_process_intent_passes_image_path_to_generator(self) -> None:
+        observed: dict[str, str | None] = {}
+
+        def generator(prompt: str, image_path: str | None) -> str:
+            observed["prompt"] = prompt
+            observed["image_path"] = image_path
+            return '{"command":"hold"}'
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            engine = CognitionEngine(
+                validator=_airborne_validator(),
+                generator=generator,
+                log_path=Path(tmpdir) / "cognition.log",
+            )
+
+            result = _process_quiet(engine, "mantieni posizione", image_path="/tmp/frame.jpg")
+
+            self.assertIsInstance(result, CognitionResult)
+            self.assertEqual(observed["image_path"], "/tmp/frame.jpg")
+            self.assertIn("IMAGE_PATH", observed["prompt"] or "")
+
+    def test_process_intent_includes_drone_state_in_prompt(self) -> None:
+        observed: dict[str, str | None] = {}
+
+        def generator(prompt: str, image_path: str | None) -> str:
+            del image_path
+            observed["prompt"] = prompt
+            return '{"command":"hold"}'
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            engine = CognitionEngine(
+                validator=_airborne_validator(),
+                generator=generator,
+                log_path=Path(tmpdir) / "cognition.log",
+            )
+
+            result = _process_quiet(
+                engine,
+                "mantieni posizione",
+                drone_state=DroneStateSnapshot(
+                    state=DroneOperationalState.AIRBORNE,
+                    connected=True,
+                    battery_remaining=0.90,
+                ),
+            )
+
+            self.assertIsInstance(result, CognitionResult)
+            self.assertIn("CURRENT_DRONE_STATE", observed["prompt"] or "")
+            self.assertIn("AIRBORNE", observed["prompt"] or "")
 
 
 if __name__ == "__main__":

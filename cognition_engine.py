@@ -21,11 +21,12 @@ from command_validator import (
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_MODEL_ID = "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
+DEFAULT_MODEL_ID = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
 JSON_OBJECT_START_RE = re.compile(r"\{")
 SYSTEM_PROMPT = (
-    "Sei un drone controller. Converti il linguaggio naturale in JSON. "
-    "Rispondi SOLO con JSON conforme allo schema. Non spiegare, non conversare."
+    "Sei il computer di bordo di un drone. Guarda l'immagine della telecamera FPV "
+    "e leggi il comando vocale dell'operatore. Il tuo compito è estrarre l'intento "
+    "spaziale e tradurlo in un JSON valido conforme allo schema. Non aggiungere testo extra."
 )
 
 
@@ -54,7 +55,7 @@ class CognitionError:
         return False
 
 
-GeneratorFn = Callable[[str], str]
+GeneratorFn = Callable[[str, Optional[str]], str]
 
 
 class CognitionEngine:
@@ -82,22 +83,22 @@ class CognitionEngine:
         self.log_path = Path(log_path)
         self._external_generator = generator
         self._model = None
-        self._tokenizer = None
+        self._processor = None
         self._mlx_generate = None
-        self._mlx_make_sampler = None
 
     def process_intent(
         self,
-        text: str,
+        text_input: str,
+        image_path: Optional[str] = None,
         *,
         drone_state: Optional[DroneStateSnapshot] = None,
     ) -> CognitionResult | CognitionError:
-        raw_prompt = self._build_prompt(text)
+        raw_prompt = self._build_prompt(text_input, image_path=image_path, drone_state=drone_state)
         raw_response = ""
         parsed_json: Optional[dict] = None
 
         try:
-            raw_response = self._generate(raw_prompt)
+            raw_response = self._generate(raw_prompt, image_path=image_path)
             parsed_json = self._extract_json_object(raw_response)
             validated = self.validator.validate(
                 json.dumps(parsed_json, ensure_ascii=False, separators=(",", ":")),
@@ -144,49 +145,60 @@ class CognitionEngine:
         self._log_transaction(raw_prompt, raw_response, parsed_json, result)
         return result
 
-    def _build_prompt(self, intent_text: str) -> str:
+    def _build_prompt(
+        self,
+        intent_text: str,
+        *,
+        image_path: Optional[str] = None,
+        drone_state: Optional[DroneStateSnapshot] = None,
+    ) -> str:
         schema = json.dumps(ActionCommand.model_json_schema(), indent=2, ensure_ascii=False)
+        image_reference = image_path if image_path is not None else "<NO_IMAGE_AVAILABLE>"
+        state_reference = drone_state.model_dump(mode="json") if drone_state is not None else "<UNKNOWN>"
         return (
             f"{SYSTEM_PROMPT}\n\n"
             "JSON_SCHEMA:\n"
             f"{schema}\n\n"
+            "CURRENT_DRONE_STATE:\n"
+            f"{state_reference}\n\n"
+            "IMAGE_PATH:\n"
+            f"{image_reference}\n\n"
             "USER_INTENT:\n"
             f"{intent_text}\n\n"
             "JSON:"
         )
 
-    def _generate(self, raw_prompt: str) -> str:
+    def _generate(self, raw_prompt: str, *, image_path: Optional[str]) -> str:
         if self._external_generator is not None:
-            return self._external_generator(raw_prompt)
+            return self._external_generator(raw_prompt, image_path)
 
         self._load_local_model()
-        sampler = self._mlx_make_sampler(temp=self.temperature)
-        return self._mlx_generate(
+        result = self._mlx_generate(
             self._model,
-            self._tokenizer,
+            self._processor,
             prompt=raw_prompt,
+            image=image_path,
             max_tokens=self.max_tokens,
-            sampler=sampler,
+            temperature=self.temperature,
             verbose=False,
         )
+        return result.text if hasattr(result, "text") else str(result)
 
     def _load_local_model(self) -> None:
-        if self._model is not None and self._tokenizer is not None:
+        if self._model is not None and self._processor is not None:
             return
 
         try:
-            from mlx_lm import generate, load
-            from mlx_lm.sample_utils import make_sampler
+            from mlx_vlm import generate, load
         except ImportError as exc:
             raise RuntimeError(
-                "mlx-lm is not installed in this virtualenv. "
-                "Run: .venv/bin/python -m pip install -r requirements-phase2.txt"
+                "mlx-vlm is not installed in this virtualenv. "
+                "Run: .venv/bin/python -m pip install -r requirements-phase4.txt"
             ) from exc
 
-        logger.info("Loading local MLX model: %s", self.model_id)
-        self._model, self._tokenizer = load(self.model_id)
+        logger.info("Loading local MLX-VLM model: %s", self.model_id)
+        self._model, self._processor = load(self.model_id)
         self._mlx_generate = generate
-        self._mlx_make_sampler = make_sampler
 
     def _extract_json_object(self, raw_response: str) -> dict:
         cleaned = raw_response.strip()
