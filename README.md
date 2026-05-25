@@ -11,13 +11,11 @@ The current implementation has been validated against PX4 SITL with jMAVSim, QGr
 
 ## Demo Video
 
-The OBS recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGroundControl, voice intent parsing, FPV frame capture, VLM reasoning, deterministic guardrails, and MAVSDK command dispatch.
+The recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGroundControl, voice intent parsing, FPV frame capture, VLM reasoning, deterministic guardrails, and MAVSDK command dispatch.
 
-<video src="docs/vla-edge.mov" controls width="100%">
-  Edge-VLA-Micro demo: docs/vla-edge.mov
-</video>
+Click the preview image to open the recording. 
+[![Edge-VLA-Micro demo](docs/qgroundcontrol.png)](docs/vla-edge.mov)
 
-If the embedded player is not rendered by the viewer, open the recording directly: [Edge-VLA-Micro demo](docs/vla-edge.mov).
 
 ## System Architecture
 
