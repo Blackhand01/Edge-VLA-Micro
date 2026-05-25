@@ -13,8 +13,11 @@ The current implementation has been validated against PX4 SITL with jMAVSim, QGr
 
 The recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGroundControl, voice intent parsing, FPV frame capture, VLM reasoning, deterministic guardrails, and MAVSDK command dispatch.
 
-Click the preview image to open the recording. 
-[![Edge-VLA-Micro demo](docs/qgroundcontrol.png)](docs/vla-edge.mov)
+Click the preview image to open the recording.
+
+<a href="docs/vla-edge.mov" target="_blank" rel="noopener noreferrer">
+  <img src="docs/qgroundcontrol.png" alt="Edge-VLA-Micro demo">
+</a>
 
 
 ## System Architecture
@@ -89,7 +92,11 @@ For non-visual commands such as `arm`, `takeoff`, `land`, and `hold`, the cognit
 
 The system was profiled on Apple Silicon UMA using per-token VLM instrumentation. The telemetry captures Time To First Token (TTFT), decode latency, generated token count, TPS, ASR time, vision capture time, safety validation time, and total loop latency in `logs/performance.csv`.
 
-[![Open the interactive latency profiler](docs/LatencyProfiler.png)](https://blackhand01.github.io/Edge-VLA-Micro/) to simulate ASR, vision, VLM prefill, decode, and safety-guardrail tradeoffs directly from GitHub Pages. The profiler source is `docs/index.html`.
+<a href="https://blackhand01.github.io/Edge-VLA-Micro/" target="_blank" rel="noopener noreferrer">
+  <img src="docs/LatencyProfiler.png" alt="Open the interactive latency profiler">
+</a>
+
+Use the interactive latency profiler to simulate ASR, vision, VLM prefill, decode, and safety-guardrail tradeoffs directly from GitHub Pages. The profiler source is `docs/index.html`.
 
 Observed averages from the current SITL run:
 
