@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,15 +7,15 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #070b0d;
-      --surface: #101619;
-      --surface-2: #0c1114;
-      --surface-3: #151d21;
-      --border: #26343a;
-      --border-strong: #3a4d54;
-      --text: #edf7f7;
-      --muted: #9aacad;
-      --subtle: #6f8284;
+      --bg: #070c0f;
+      --panel: #10171a;
+      --panel-2: #0b1114;
+      --panel-3: #141d21;
+      --line: #27363d;
+      --line-strong: #3c5058;
+      --text: #eef7f8;
+      --muted: #9aabad;
+      --subtle: #6f8285;
       --cyan: #34d7ff;
       --green: #72f29a;
       --amber: #ffd166;
@@ -33,8 +33,8 @@
     html {
       min-height: 100%;
       background:
-        linear-gradient(135deg, rgba(52, 215, 255, 0.12), transparent 32%),
-        linear-gradient(315deg, rgba(114, 242, 154, 0.10), transparent 30%),
+        linear-gradient(135deg, rgba(52, 215, 255, 0.11), transparent 32%),
+        linear-gradient(315deg, rgba(114, 242, 154, 0.09), transparent 30%),
         var(--bg);
     }
 
@@ -46,13 +46,13 @@
       letter-spacing: 0;
     }
 
-    select,
-    input {
+    input,
+    select {
       font: inherit;
     }
 
     .page {
-      width: min(1320px, 100%);
+      width: min(1360px, 100%);
       min-height: 100vh;
       margin: 0 auto;
       padding: 28px;
@@ -62,15 +62,8 @@
     }
 
     .header {
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
       padding: 22px 0 24px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .header-copy {
-      max-width: 860px;
+      border-bottom: 1px solid var(--line);
     }
 
     .eyebrow {
@@ -89,74 +82,53 @@
     }
 
     .intro {
-      max-width: 790px;
+      max-width: 780px;
       margin: 14px 0 0;
       color: var(--muted);
       font-size: 15px;
       line-height: 1.6;
     }
 
-    .header-badge {
-      align-self: flex-start;
-      flex: 0 0 auto;
-      border: 1px solid rgba(52, 215, 255, 0.42);
-      border-radius: var(--radius);
-      padding: 13px 15px;
-      background: rgba(16, 22, 25, 0.72);
-      box-shadow: var(--shadow);
-      color: var(--cyan);
-      font-family: var(--mono);
-      font-size: 12px;
-      text-align: right;
-    }
-
     .comparison {
       display: flex;
-      gap: 18px;
       align-items: stretch;
+      gap: 18px;
     }
 
     .config {
       flex: 1 1 0;
       min-width: 0;
-      border: 1px solid var(--border);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      background: rgba(16, 22, 25, 0.9);
+      background: rgba(16, 23, 26, 0.92);
       box-shadow: var(--shadow);
       overflow: hidden;
     }
 
-    .config.highlight {
-      border-color: rgba(114, 242, 154, 0.38);
+    .config.winner {
+      border-color: rgba(114, 242, 154, 0.46);
     }
 
     .config-header {
-      min-height: 88px;
+      min-height: 78px;
       padding: 18px 20px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(12, 17, 20, 0.82);
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 17, 20, 0.84);
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      align-items: flex-start;
+      gap: 14px;
     }
 
     .config-title {
       margin: 0;
-      font-size: 20px;
+      font-size: 22px;
       line-height: 1.15;
     }
 
-    .config-subtitle {
-      margin: 7px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.4;
-    }
-
-    .status-pill {
+    .state-pill {
       flex: 0 0 auto;
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-radius: 999px;
       padding: 6px 9px;
       color: var(--muted);
@@ -165,8 +137,8 @@
       white-space: nowrap;
     }
 
-    .config.highlight .status-pill {
-      border-color: rgba(114, 242, 154, 0.42);
+    .config.winner .state-pill {
+      border-color: rgba(114, 242, 154, 0.48);
       color: var(--green);
     }
 
@@ -176,9 +148,29 @@
       gap: 20px;
     }
 
-    .controls {
+    .control-grid {
       display: grid;
-      gap: 15px;
+      gap: 18px;
+    }
+
+    .group {
+      display: grid;
+      gap: 12px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .group:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .group-title {
+      margin: 0;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 12px;
+      text-transform: uppercase;
     }
 
     .field {
@@ -189,6 +181,7 @@
     label {
       display: flex;
       justify-content: space-between;
+      align-items: baseline;
       gap: 12px;
       color: var(--text);
       font-size: 13px;
@@ -196,7 +189,8 @@
     }
 
     .value {
-      color: var(--cyan);
+      flex: 0 0 auto;
+      color: var(--green);
       font-family: var(--mono);
       font-size: 12px;
       white-space: nowrap;
@@ -204,19 +198,13 @@
 
     select {
       width: 100%;
-      min-height: 44px;
-      border: 1px solid var(--border-strong);
+      min-height: 42px;
+      border: 1px solid var(--line-strong);
       border-radius: var(--radius);
-      background: var(--surface-2);
+      background: var(--panel-2);
       color: var(--text);
       padding: 0 12px;
       outline: none;
-    }
-
-    select:focus,
-    input[type="range"]:focus-visible {
-      outline: 2px solid rgba(52, 215, 255, 0.62);
-      outline-offset: 2px;
     }
 
     input[type="range"] {
@@ -225,22 +213,21 @@
       cursor: pointer;
     }
 
-    .hint {
-      margin: 0;
-      color: var(--subtle);
-      font-size: 12px;
-      line-height: 1.4;
+    select:focus,
+    input[type="range"]:focus-visible {
+      outline: 2px solid rgba(52, 215, 255, 0.64);
+      outline-offset: 2px;
     }
 
     .total-panel {
-      min-height: 210px;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      margin: 4px -20px 0;
+      min-height: 204px;
+      margin: 0 -20px;
       padding: 26px 20px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
       background:
         linear-gradient(135deg, rgba(52, 215, 255, 0.08), transparent 42%),
-        var(--surface-2);
+        var(--panel-2);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -248,10 +235,10 @@
       text-align: center;
     }
 
-    .config.highlight .total-panel {
+    .config.winner .total-panel {
       background:
-        linear-gradient(135deg, rgba(114, 242, 154, 0.11), transparent 44%),
-        var(--surface-2);
+        linear-gradient(135deg, rgba(114, 242, 154, 0.12), transparent 44%),
+        var(--panel-2);
     }
 
     .total-label {
@@ -284,15 +271,15 @@
 
     .breakdown {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
 
     .metric {
-      min-height: 84px;
-      border: 1px solid var(--border);
+      min-height: 82px;
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      background: var(--surface-2);
+      background: var(--panel-2);
       padding: 12px;
       display: flex;
       flex-direction: column;
@@ -308,25 +295,14 @@
 
     .metric strong {
       font-family: var(--mono);
-      font-size: 19px;
+      font-size: 18px;
       line-height: 1;
     }
 
-    .metric.sync strong {
-      color: var(--cyan);
-    }
-
-    .metric.ttft strong {
-      color: var(--green);
-    }
-
-    .metric.decode strong {
-      color: var(--amber);
-    }
-
-    .metric.safety strong {
-      color: var(--muted);
-    }
+    .sync strong { color: var(--cyan); }
+    .ttft strong { color: var(--green); }
+    .decode strong { color: var(--amber); }
+    .safety strong { color: var(--muted); }
 
     .footer-resolution {
       width: 100%;
@@ -334,12 +310,12 @@
       border-radius: var(--radius);
       background:
         linear-gradient(90deg, rgba(114, 242, 154, 0.12), rgba(52, 215, 255, 0.08)),
-        rgba(16, 22, 25, 0.92);
+        rgba(16, 23, 26, 0.92);
       box-shadow: var(--shadow);
       padding: 18px 20px;
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
       gap: 18px;
     }
 
@@ -352,7 +328,7 @@
 
     .winner-label {
       flex: 0 0 auto;
-      border: 1px solid rgba(114, 242, 154, 0.42);
+      border: 1px solid rgba(114, 242, 154, 0.46);
       border-radius: 999px;
       padding: 7px 10px;
       color: var(--green);
@@ -361,15 +337,16 @@
       white-space: nowrap;
     }
 
+    @media (max-width: 1180px) {
+      .breakdown {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 980px) {
-      .header,
       .comparison,
       .footer-resolution {
         flex-direction: column;
-      }
-
-      .header-badge {
-        text-align: left;
       }
     }
 
@@ -379,7 +356,7 @@
       }
 
       .config-header {
-        flex-direction: column;
+        min-height: auto;
       }
 
       .breakdown {
@@ -387,7 +364,7 @@
       }
 
       .total-panel {
-        min-height: 178px;
+        min-height: 176px;
       }
     }
   </style>
@@ -395,69 +372,93 @@
 <body>
   <main class="page">
     <header class="header">
-      <div class="header-copy">
-        <p class="eyebrow">Edge-VLA / test A/B di latenza</p>
-        <h1>Edge-VLA Autonomy Latency Profiler</h1>
-        <p class="intro">
-          Confronto diretto tra la baseline software Mac SITL e una architettura futura Jetson / TensorRT.
-          Ogni configurazione e' indipendente: modifica ASR, pipeline visiva, memoria VLM e token generati.
-        </p>
-      </div>
-      <div class="header-badge">GitHub Pages<br>HTML autonomo</div>
+      <p class="eyebrow">Edge-VLA latency model</p>
+      <h1>Edge-VLA Autonomy Latency Profiler</h1>
+      <p class="intro">Tune two independent autonomy pipeline configurations and compare their end-to-end control-loop latency.</p>
     </header>
 
-    <section class="comparison" aria-label="Confronto configurazioni">
+    <section class="comparison" aria-label="Configuration comparison">
       <article class="config" data-config="a">
         <div class="config-header">
-          <div>
-            <h2 class="config-title">Configurazione A</h2>
-            <p class="config-subtitle">Baseline software attuale: Mac SITL, frame Full HD, output JSON completo.</p>
-          </div>
-          <span class="status-pill" id="status-a">Riferimento</span>
+          <h2 class="config-title">Configuration A</h2>
+          <span class="state-pill" id="state-a">A</span>
         </div>
+
         <div class="config-body">
-          <div class="controls">
-            <div class="field">
-              <label for="asr-a">Modello ASR</label>
-              <select id="asr-a" data-field="asr">
-                <option value="mac" selected>faster-whisper su Mac (4.0s)</option>
-                <option value="jetson">TensorRT Whisper su Jetson (0.1s)</option>
-              </select>
+          <section class="control-grid" aria-label="Configuration A inputs">
+            <div class="group">
+              <h3 class="group-title">Audio path</h3>
+              <div class="field">
+                <label for="whisper-model-a">Whisper model</label>
+                <select id="whisper-model-a" data-field="whisperModel">
+                  <option value="tiny" selected>Tiny</option>
+                  <option value="base">Base</option>
+                  <option value="small">Small</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="audio-engine-a">ASR engine</label>
+                <select id="audio-engine-a" data-field="audioEngine">
+                  <option value="standard">Standard PyTorch</option>
+                  <option value="optimized" selected>faster-whisper CTranslate2</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="audio-duration-a">
+                  Audio duration
+                  <span class="value" id="audio-duration-label-a">3.0 s</span>
+                </label>
+                <input id="audio-duration-a" data-field="audioDuration" type="range" min="1" max="5" step="0.1" value="3">
+              </div>
             </div>
 
-            <div class="field">
-              <label for="vision-a">Pipeline visiva</label>
-              <select id="vision-a" data-field="vision">
-                <option value="full" selected>Full HD 1080p (460ms)</option>
-                <option value="crop">Ritaglio centrale 224x224 (35ms)</option>
-              </select>
+            <div class="group">
+              <h3 class="group-title">Vision path</h3>
+              <div class="field">
+                <label for="resolution-a">Capture resolution</label>
+                <select id="resolution-a" data-field="resolution">
+                  <option value="1920x1080">1920x1080 Full HD</option>
+                  <option value="448x448">448x448 Medium</option>
+                  <option value="224x224" selected>224x224 Aggressive crop</option>
+                </select>
+              </div>
             </div>
 
-            <div class="field">
-              <label for="memory-a">Memoria VLM</label>
-              <select id="memory-a" data-field="memory">
-                <option value="fp16" selected>FP16 (Precisione Standard)</option>
-                <option value="int4">INT4 (Quantizzato TensorRT)</option>
-              </select>
+            <div class="group">
+              <h3 class="group-title">VLM core</h3>
+              <div class="field">
+                <label for="vlm-params-a">
+                  Model parameters
+                  <span class="value" id="vlm-params-label-a">2.0B</span>
+                </label>
+                <input id="vlm-params-a" data-field="vlmParams" type="range" min="0.5" max="8" step="0.1" value="2">
+              </div>
+              <div class="field">
+                <label for="precision-a">Quantization</label>
+                <select id="precision-a" data-field="precision">
+                  <option value="fp16">FP16</option>
+                  <option value="int8">INT8</option>
+                  <option value="int4" selected>INT4</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="tokens-a">
+                  Output tokens
+                  <span class="value" id="tokens-label-a">80</span>
+                </label>
+                <input id="tokens-a" data-field="tokens" type="range" min="1" max="150" step="1" value="80">
+              </div>
             </div>
-
-            <div class="field">
-              <label for="tokens-a">
-                Output generato
-                <span class="value" id="tokens-label-a">80 token</span>
-              </label>
-              <input id="tokens-a" data-field="tokens" type="range" min="1" max="100" step="1" value="80">
-              <p class="hint">1 token = codice compresso, 80 token = JSON completo.</p>
-            </div>
-          </div>
-
-          <section class="total-panel" aria-label="Latenza totale configurazione A">
-            <p class="total-label">Latenza totale</p>
-            <div class="total-value"><span id="total-a">0.00</span><small> s</small></div>
-            <p class="rate" id="rate-a">0.0 Hz</p>
           </section>
 
-          <section class="breakdown" aria-label="Breakdown configurazione A">
+          <section class="total-panel" aria-label="Configuration A total latency">
+            <p class="total-label">Total latency</p>
+            <div class="total-value"><span id="total-a">0.00</span><small> s</small></div>
+            <p class="rate" id="rate-a">0.00 Hz</p>
+          </section>
+
+          <section class="breakdown" aria-label="Configuration A latency breakdown">
             <div class="metric sync">
               <span>Sync Audio/Video</span>
               <strong id="sync-a">0 ms</strong>
@@ -467,68 +468,98 @@
               <strong id="ttft-a">0 ms</strong>
             </div>
             <div class="metric decode">
-              <span>Decodifica</span>
+              <span>Decode</span>
               <strong id="decode-a">0 ms</strong>
             </div>
             <div class="metric safety">
-              <span>Sicurezza</span>
-              <strong id="safety-a">37 ms</strong>
+              <span>Safety</span>
+              <strong id="safety-a">36.9 ms</strong>
             </div>
           </section>
         </div>
       </article>
 
-      <article class="config highlight" data-config="b">
+      <article class="config" data-config="b">
         <div class="config-header">
-          <div>
-            <h2 class="config-title">Configurazione B</h2>
-            <p class="config-subtitle">Architettura futura: Jetson / TensorRT, ritaglio aggressivo, risposta compressa.</p>
-          </div>
-          <span class="status-pill" id="status-b">Obiettivo</span>
+          <h2 class="config-title">Configuration B</h2>
+          <span class="state-pill" id="state-b">B</span>
         </div>
+
         <div class="config-body">
-          <div class="controls">
-            <div class="field">
-              <label for="asr-b">Modello ASR</label>
-              <select id="asr-b" data-field="asr">
-                <option value="mac">faster-whisper su Mac (4.0s)</option>
-                <option value="jetson" selected>TensorRT Whisper su Jetson (0.1s)</option>
-              </select>
+          <section class="control-grid" aria-label="Configuration B inputs">
+            <div class="group">
+              <h3 class="group-title">Audio path</h3>
+              <div class="field">
+                <label for="whisper-model-b">Whisper model</label>
+                <select id="whisper-model-b" data-field="whisperModel">
+                  <option value="tiny" selected>Tiny</option>
+                  <option value="base">Base</option>
+                  <option value="small">Small</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="audio-engine-b">ASR engine</label>
+                <select id="audio-engine-b" data-field="audioEngine">
+                  <option value="standard">Standard PyTorch</option>
+                  <option value="optimized" selected>faster-whisper CTranslate2</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="audio-duration-b">
+                  Audio duration
+                  <span class="value" id="audio-duration-label-b">3.0 s</span>
+                </label>
+                <input id="audio-duration-b" data-field="audioDuration" type="range" min="1" max="5" step="0.1" value="3">
+              </div>
             </div>
 
-            <div class="field">
-              <label for="vision-b">Pipeline visiva</label>
-              <select id="vision-b" data-field="vision">
-                <option value="full">Full HD 1080p (460ms)</option>
-                <option value="crop" selected>Ritaglio centrale 224x224 (35ms)</option>
-              </select>
+            <div class="group">
+              <h3 class="group-title">Vision path</h3>
+              <div class="field">
+                <label for="resolution-b">Capture resolution</label>
+                <select id="resolution-b" data-field="resolution">
+                  <option value="1920x1080">1920x1080 Full HD</option>
+                  <option value="448x448">448x448 Medium</option>
+                  <option value="224x224" selected>224x224 Aggressive crop</option>
+                </select>
+              </div>
             </div>
 
-            <div class="field">
-              <label for="memory-b">Memoria VLM</label>
-              <select id="memory-b" data-field="memory">
-                <option value="fp16">FP16 (Precisione Standard)</option>
-                <option value="int4" selected>INT4 (Quantizzato TensorRT)</option>
-              </select>
+            <div class="group">
+              <h3 class="group-title">VLM core</h3>
+              <div class="field">
+                <label for="vlm-params-b">
+                  Model parameters
+                  <span class="value" id="vlm-params-label-b">2.0B</span>
+                </label>
+                <input id="vlm-params-b" data-field="vlmParams" type="range" min="0.5" max="8" step="0.1" value="2">
+              </div>
+              <div class="field">
+                <label for="precision-b">Quantization</label>
+                <select id="precision-b" data-field="precision">
+                  <option value="fp16">FP16</option>
+                  <option value="int8">INT8</option>
+                  <option value="int4" selected>INT4</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="tokens-b">
+                  Output tokens
+                  <span class="value" id="tokens-label-b">80</span>
+                </label>
+                <input id="tokens-b" data-field="tokens" type="range" min="1" max="150" step="1" value="80">
+              </div>
             </div>
-
-            <div class="field">
-              <label for="tokens-b">
-                Output generato
-                <span class="value" id="tokens-label-b">1 token</span>
-              </label>
-              <input id="tokens-b" data-field="tokens" type="range" min="1" max="100" step="1" value="1">
-              <p class="hint">1 token = codice compresso, 80 token = JSON completo.</p>
-            </div>
-          </div>
-
-          <section class="total-panel" aria-label="Latenza totale configurazione B">
-            <p class="total-label">Latenza totale</p>
-            <div class="total-value"><span id="total-b">0.00</span><small> s</small></div>
-            <p class="rate" id="rate-b">0.0 Hz</p>
           </section>
 
-          <section class="breakdown" aria-label="Breakdown configurazione B">
+          <section class="total-panel" aria-label="Configuration B total latency">
+            <p class="total-label">Total latency</p>
+            <div class="total-value"><span id="total-b">0.00</span><small> s</small></div>
+            <p class="rate" id="rate-b">0.00 Hz</p>
+          </section>
+
+          <section class="breakdown" aria-label="Configuration B latency breakdown">
             <div class="metric sync">
               <span>Sync Audio/Video</span>
               <strong id="sync-b">0 ms</strong>
@@ -538,12 +569,12 @@
               <strong id="ttft-b">0 ms</strong>
             </div>
             <div class="metric decode">
-              <span>Decodifica</span>
+              <span>Decode</span>
               <strong id="decode-b">0 ms</strong>
             </div>
             <div class="metric safety">
-              <span>Sicurezza</span>
-              <strong id="safety-b">37 ms</strong>
+              <span>Safety</span>
+              <strong id="safety-b">36.9 ms</strong>
             </div>
           </section>
         </div>
@@ -551,83 +582,82 @@
     </section>
 
     <footer class="footer-resolution" aria-live="polite">
-      <p id="resolution-text">Calcolo confronto...</p>
-      <span class="winner-label" id="winner-label">A/B</span>
+      <p id="resolution-text">Configurations are equivalent.</p>
+      <span class="winner-label" id="winner-label">Tie</span>
     </footer>
   </main>
 
   <script>
-    const SAFETY_MS = 37;
+    const SAFETY_MS = 36.9;
+    const MEMORY_BANDWIDTH_GBPS = 100;
 
-    const CONFIG = {
-      asr: {
-        mac: 4000,
-        jetson: 100
-      },
-      vision: {
-        full: 460,
-        crop: 35
-      },
-      ttft: {
-        full: 3800,
-        crop: 420
-      },
-      memoryMultiplier: {
-        fp16: 1,
-        int4: 0.5
-      },
-      decodePerToken: {
-        fp16: 40,
-        int4: 10
-      }
+    const WHISPER_PARAMS_B = {
+      tiny: 0.039,
+      base: 0.074,
+      small: 0.244,
+      large: 1.5
+    };
+
+    const RESOLUTIONS = {
+      "1920x1080": { width: 1920, height: 1080, latency: 461 },
+      "448x448": { width: 448, height: 448, latency: 90 },
+      "224x224": { width: 224, height: 224, latency: 35 }
+    };
+
+    const BYTES_PER_WEIGHT = {
+      fp16: 2,
+      int8: 1,
+      int4: 0.5
     };
 
     const state = {
-      a: {
-        asr: document.getElementById("asr-a"),
-        vision: document.getElementById("vision-a"),
-        memory: document.getElementById("memory-a"),
-        tokens: document.getElementById("tokens-a"),
-        tokensLabel: document.getElementById("tokens-label-a"),
-        total: document.getElementById("total-a"),
-        rate: document.getElementById("rate-a"),
-        sync: document.getElementById("sync-a"),
-        ttft: document.getElementById("ttft-a"),
-        decode: document.getElementById("decode-a"),
-        safety: document.getElementById("safety-a"),
-        card: document.querySelector('[data-config="a"]'),
-        status: document.getElementById("status-a")
-      },
-      b: {
-        asr: document.getElementById("asr-b"),
-        vision: document.getElementById("vision-b"),
-        memory: document.getElementById("memory-b"),
-        tokens: document.getElementById("tokens-b"),
-        tokensLabel: document.getElementById("tokens-label-b"),
-        total: document.getElementById("total-b"),
-        rate: document.getElementById("rate-b"),
-        sync: document.getElementById("sync-b"),
-        ttft: document.getElementById("ttft-b"),
-        decode: document.getElementById("decode-b"),
-        safety: document.getElementById("safety-b"),
-        card: document.querySelector('[data-config="b"]'),
-        status: document.getElementById("status-b")
-      }
+      a: collect("a"),
+      b: collect("b")
     };
 
     const resolutionText = document.getElementById("resolution-text");
     const winnerLabel = document.getElementById("winner-label");
 
+    function collect(side) {
+      return {
+        card: document.querySelector(`[data-config="${side}"]`),
+        status: document.getElementById(`state-${side}`),
+        whisperModel: document.getElementById(`whisper-model-${side}`),
+        audioEngine: document.getElementById(`audio-engine-${side}`),
+        audioDuration: document.getElementById(`audio-duration-${side}`),
+        resolution: document.getElementById(`resolution-${side}`),
+        vlmParams: document.getElementById(`vlm-params-${side}`),
+        precision: document.getElementById(`precision-${side}`),
+        tokens: document.getElementById(`tokens-${side}`),
+        audioDurationLabel: document.getElementById(`audio-duration-label-${side}`),
+        vlmParamsLabel: document.getElementById(`vlm-params-label-${side}`),
+        tokensLabel: document.getElementById(`tokens-label-${side}`),
+        total: document.getElementById(`total-${side}`),
+        rate: document.getElementById(`rate-${side}`),
+        sync: document.getElementById(`sync-${side}`),
+        ttft: document.getElementById(`ttft-${side}`),
+        decode: document.getElementById(`decode-${side}`),
+        safety: document.getElementById(`safety-${side}`)
+      };
+    }
+
     function calculate(side) {
       const controls = state[side];
-      const audio = CONFIG.asr[controls.asr.value];
-      const video = CONFIG.vision[controls.vision.value];
-      const sync = Math.max(audio, video);
-      const ttftBase = CONFIG.ttft[controls.vision.value];
-      const memoryMultiplier = CONFIG.memoryMultiplier[controls.memory.value];
-      const ttft = ttftBase * memoryMultiplier;
+      const whisperParams = WHISPER_PARAMS_B[controls.whisperModel.value];
+      const duration = Number(controls.audioDuration.value);
+      const engineFactor = controls.audioEngine.value === "standard" ? 800 : 150;
+      const resolution = RESOLUTIONS[controls.resolution.value];
+      const vlmParams = Number(controls.vlmParams.value);
+      const bytesPerWeight = BYTES_PER_WEIGHT[controls.precision.value];
       const tokens = Number(controls.tokens.value);
-      const decode = CONFIG.decodePerToken[controls.memory.value] * tokens;
+
+      const audio = whisperParams * duration * engineFactor;
+      const video = resolution.latency;
+      const patches = (resolution.width * resolution.height) / 196;
+      const ttft = patches * vlmParams * 0.18;
+      const modelSizeGb = vlmParams * bytesPerWeight;
+      const decode = (modelSizeGb / MEMORY_BANDWIDTH_GBPS) * 1000 * tokens;
+      const sync = Math.max(audio, video);
       const total = sync + ttft + decode + SAFETY_MS;
       const rateHz = 1000 / total;
 
@@ -640,23 +670,26 @@
         safety: SAFETY_MS,
         total,
         rateHz,
-        tokens
+        tokens,
+        duration,
+        vlmParams
       };
     }
 
     function formatMs(value) {
-      return `${Math.round(value).toLocaleString("it-IT")} ms`;
-    }
-
-    function formatSeconds(value) {
-      return (value / 1000).toFixed(value < 1000 ? 2 : 2);
+      if (value < 100) {
+        return `${value.toFixed(1)} ms`;
+      }
+      return `${Math.round(value).toLocaleString("en-US")} ms`;
     }
 
     function renderSide(side, data) {
       const controls = state[side];
-      controls.tokensLabel.textContent = `${data.tokens} token`;
-      controls.total.textContent = formatSeconds(data.total);
-      controls.rate.textContent = `${data.rateHz.toFixed(2)} Hz teorici`;
+      controls.audioDurationLabel.textContent = `${data.duration.toFixed(1)} s`;
+      controls.vlmParamsLabel.textContent = `${data.vlmParams.toFixed(1)}B`;
+      controls.tokensLabel.textContent = `${data.tokens}`;
+      controls.total.textContent = (data.total / 1000).toFixed(2);
+      controls.rate.textContent = `${data.rateHz.toFixed(2)} Hz control rate`;
       controls.sync.textContent = formatMs(data.sync);
       controls.ttft.textContent = formatMs(data.ttft);
       controls.decode.textContent = formatMs(data.decode);
@@ -664,28 +697,29 @@
     }
 
     function renderResolution(a, b) {
-      const winner = a.total <= b.total ? "A" : "B";
-      const winnerData = winner === "A" ? a : b;
-      const loserData = winner === "A" ? b : a;
-      const reduction = loserData.total === 0
-        ? 0
-        : ((loserData.total - winnerData.total) / loserData.total) * 100;
+      const diff = Math.abs(a.total - b.total);
 
-      state.a.card.classList.toggle("highlight", winner === "A");
-      state.b.card.classList.toggle("highlight", winner === "B");
-      state.a.status.textContent = winner === "A" ? "Vincente" : "Riferimento";
-      state.b.status.textContent = winner === "B" ? "Vincente" : "Obiettivo";
+      state.a.card.classList.remove("winner");
+      state.b.card.classList.remove("winner");
+      state.a.status.textContent = "A";
+      state.b.status.textContent = "B";
 
-      if (Math.abs(a.total - b.total) < 1) {
-        winnerLabel.textContent = "Pareggio";
-        resolutionText.textContent = "Le due configurazioni hanno latenza equivalente entro 1 ms; il rateo di controllo resta invariato.";
+      if (diff < 1) {
+        winnerLabel.textContent = "Tie";
+        resolutionText.textContent = "Configurations are equivalent within 1 ms.";
         return;
       }
 
-      winnerLabel.textContent = `Vince ${winner}`;
+      const winner = a.total < b.total ? "A" : "B";
+      const winnerData = winner === "A" ? a : b;
+      const loserData = winner === "A" ? b : a;
+      const reduction = ((loserData.total - winnerData.total) / loserData.total) * 100;
+
+      state[winner.toLowerCase()].card.classList.add("winner");
+      state[winner.toLowerCase()].status.textContent = "Winner";
+      winnerLabel.textContent = `Configuration ${winner}`;
       resolutionText.textContent =
-        `La Configurazione ${winner} riduce la latenza del ${Math.round(reduction)}% rispetto alla Configurazione ${winner === "A" ? "B" : "A"}, ` +
-        `permettendo un rateo di controllo di ${winnerData.rateHz.toFixed(2)} Hz.`;
+        `Configuration ${winner} reduces latency by ${Math.round(reduction)}% and enables a ${winnerData.rateHz.toFixed(2)} Hz control rate.`;
     }
 
     function update() {
@@ -697,8 +731,16 @@
     }
 
     ["a", "b"].forEach((side) => {
-      ["asr", "vision", "memory", "tokens"].forEach((name) => {
-        const control = state[side][name];
+      [
+        "whisperModel",
+        "audioEngine",
+        "audioDuration",
+        "resolution",
+        "vlmParams",
+        "precision",
+        "tokens"
+      ].forEach((field) => {
+        const control = state[side][field];
         control.addEventListener("input", update);
         control.addEventListener("change", update);
       });
