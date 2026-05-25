@@ -14,10 +14,10 @@ The current implementation has been validated against PX4 SITL with jMAVSim, QGr
 The OBS recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGroundControl, voice intent parsing, FPV frame capture, VLM reasoning, deterministic guardrails, and MAVSDK command dispatch.
 
 <video src="docs/vla-edge.mov" controls width="100%">
-  Edge-VLA-Micro OBS demo: docs/vla-edge.mov
+  Edge-VLA-Micro demo: docs/vla-edge.mov
 </video>
 
-If the embedded player is not rendered by the viewer, open the recording directly: [docs/vla-edge.mov](docs/vla-edge.mov).
+If the embedded player is not rendered by the viewer, open the recording directly: [Edge-VLA-Micro demo](docs/vla-edge.mov).
 
 ## System Architecture
 
@@ -219,21 +219,8 @@ Wait until PX4 reports that the simulator is connected and ready for takeoff.
 
 Wait until QGroundControl displays the simulated vehicle and telemetry stream.
 
-### 4. Terminal 3 - Verify Camera Input
 
-Camera indices vary by machine and OBS/virtual-camera configuration. Before running the agent, verify the actual capture device:
-
-```bash
-/tmp/edge-vla-live-venv/bin/python -m src.tools.vision_probe \
-  --camera-index 1 \
-  --frame-path tmp/probe_index1.jpg
-
-open tmp/probe_index1.jpg
-```
-
-If the frame shows the OBS placeholder or a disabled-camera image, select a different `--camera-index` or fix the OBS virtual camera source before flying.
-
-### 5. Terminal 3 - Start the Edge-VLA Agent
+### 4. Terminal 3 - Start the Edge-VLA Agent
 
 ```bash
 /tmp/edge-vla-live-venv/bin/python -m src.core.cli \
@@ -274,7 +261,7 @@ emergency
 emergenza
 ```
 
-### 6. Generate Charts
+### 5. Generate Charts
 
 After collecting telemetry:
 
