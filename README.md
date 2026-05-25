@@ -89,7 +89,7 @@ For non-visual commands such as `arm`, `takeoff`, `land`, and `hold`, the cognit
 
 The system was profiled on Apple Silicon UMA using per-token VLM instrumentation. The telemetry captures Time To First Token (TTFT), decode latency, generated token count, TPS, ASR time, vision capture time, safety validation time, and total loop latency in `logs/performance.csv`.
 
-[Open the interactive latency profiler](https://blackhand01.github.io/Edge-VLA-Micro/) to simulate ASR, vision, VLM prefill, decode, and safety-guardrail tradeoffs directly from GitHub Pages. The profiler source is `docs/index.html`.
+[![Open the interactive latency profiler](docs/LatencyProfiler.png)](https://blackhand01.github.io/Edge-VLA-Micro/) to simulate ASR, vision, VLM prefill, decode, and safety-guardrail tradeoffs directly from GitHub Pages. The profiler source is `docs/index.html`.
 
 Observed averages from the current SITL run:
 
