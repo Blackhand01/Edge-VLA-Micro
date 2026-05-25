@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Edge-VLA Edge Autonomy Latency Profiler</title>
+  <title>Edge-VLA Autonomy Latency Profiler</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #07100f;
-      --panel: #101918;
-      --panel-2: #0c1413;
-      --line: #223331;
-      --line-strong: #34514d;
-      --text: #eef8f5;
-      --muted: #93a6a1;
-      --soft: #c9d8d4;
-      --green: #66ff9a;
-      --cyan: #35d8ff;
-      --blue: #6aa4ff;
-      --amber: #ffc857;
+      --bg: #070b0d;
+      --surface: #101619;
+      --surface-2: #0c1114;
+      --surface-3: #151d21;
+      --border: #26343a;
+      --border-strong: #3a4d54;
+      --text: #edf7f7;
+      --muted: #9aacad;
+      --subtle: #6f8284;
+      --cyan: #34d7ff;
+      --green: #72f29a;
+      --amber: #ffd166;
       --red: #ff6b6b;
-      --shadow: 0 18px 60px rgba(0, 0, 0, 0.36);
+      --shadow: 0 20px 70px rgba(0, 0, 0, 0.36);
       --radius: 8px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -33,8 +33,8 @@
     html {
       min-height: 100%;
       background:
-        linear-gradient(135deg, rgba(53, 216, 255, 0.08), transparent 35%),
-        linear-gradient(315deg, rgba(102, 255, 154, 0.08), transparent 34%),
+        linear-gradient(135deg, rgba(52, 215, 255, 0.12), transparent 32%),
+        linear-gradient(315deg, rgba(114, 242, 154, 0.10), transparent 30%),
         var(--bg);
     }
 
@@ -46,34 +46,35 @@
       letter-spacing: 0;
     }
 
-    button,
-    input,
-    select {
+    select,
+    input {
       font: inherit;
     }
 
     .page {
-      width: min(1440px, 100%);
+      width: min(1320px, 100%);
+      min-height: 100vh;
       margin: 0 auto;
       padding: 28px;
-    }
-
-    .topbar {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 20px;
-      margin-bottom: 24px;
-      padding-bottom: 18px;
-      border-bottom: 1px solid var(--line);
+      flex-direction: column;
+      gap: 22px;
     }
 
-    .title-block {
-      max-width: 920px;
+    .header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 22px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-copy {
+      max-width: 860px;
     }
 
     .eyebrow {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       color: var(--green);
       font-family: var(--mono);
       font-size: 12px;
@@ -82,154 +83,131 @@
 
     h1 {
       margin: 0;
-      font-size: clamp(28px, 4vw, 50px);
-      line-height: 1.02;
+      font-size: clamp(30px, 5vw, 56px);
+      line-height: 1;
       letter-spacing: 0;
     }
 
-    .subtitle {
-      max-width: 760px;
+    .intro {
+      max-width: 790px;
       margin: 14px 0 0;
       color: var(--muted);
       font-size: 15px;
       line-height: 1.6;
     }
 
-    .baseline-chip {
+    .header-badge {
+      align-self: flex-start;
       flex: 0 0 auto;
-      border: 1px solid var(--line-strong);
-      background: rgba(16, 25, 24, 0.78);
+      border: 1px solid rgba(52, 215, 255, 0.42);
       border-radius: var(--radius);
-      padding: 14px 16px;
+      padding: 13px 15px;
+      background: rgba(16, 22, 25, 0.72);
       box-shadow: var(--shadow);
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 12px;
       text-align: right;
     }
 
-    .baseline-chip span {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
+    .comparison {
+      display: flex;
+      gap: 18px;
+      align-items: stretch;
     }
 
-    .baseline-chip strong {
-      display: block;
-      margin-top: 4px;
-      color: var(--soft);
-      font-family: var(--mono);
-      font-size: 22px;
-      font-weight: 700;
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
-      gap: 22px;
-      align-items: start;
-    }
-
-    .panel {
-      border: 1px solid var(--line);
+    .config {
+      flex: 1 1 0;
+      min-width: 0;
+      border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: rgba(16, 25, 24, 0.88);
+      background: rgba(16, 22, 25, 0.9);
       box-shadow: var(--shadow);
-    }
-
-    .controls {
-      position: sticky;
-      top: 20px;
       overflow: hidden;
     }
 
-    .panel-header {
-      padding: 18px 18px 14px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(12, 20, 19, 0.74);
+    .config.highlight {
+      border-color: rgba(114, 242, 154, 0.38);
     }
 
-    .panel-header h2 {
+    .config-header {
+      min-height: 88px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(12, 17, 20, 0.82);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .config-title {
       margin: 0;
-      font-size: 15px;
-      letter-spacing: 0;
-      text-transform: uppercase;
+      font-size: 20px;
+      line-height: 1.15;
     }
 
-    .panel-header p {
+    .config-subtitle {
       margin: 7px 0 0;
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.45;
+      line-height: 1.4;
     }
 
-    .control-section {
-      padding: 18px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .control-section:last-child {
-      border-bottom: 0;
-    }
-
-    .section-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-
-    .section-title h3 {
-      margin: 0;
-      font-size: 13px;
-      color: var(--soft);
-      text-transform: uppercase;
-      letter-spacing: 0;
-    }
-
-    .section-tag {
-      border: 1px solid rgba(102, 255, 154, 0.32);
+    .status-pill {
+      flex: 0 0 auto;
+      border: 1px solid var(--border-strong);
       border-radius: 999px;
-      padding: 4px 8px;
-      color: var(--green);
+      padding: 6px 9px;
+      color: var(--muted);
       font-family: var(--mono);
       font-size: 11px;
       white-space: nowrap;
     }
 
+    .config.highlight .status-pill {
+      border-color: rgba(114, 242, 154, 0.42);
+      color: var(--green);
+    }
+
+    .config-body {
+      padding: 20px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 15px;
+    }
+
     .field {
       display: grid;
       gap: 8px;
-      margin-top: 15px;
-    }
-
-    .field:first-of-type {
-      margin-top: 0;
     }
 
     label {
       display: flex;
-      align-items: center;
       justify-content: space-between;
       gap: 12px;
-      color: var(--soft);
+      color: var(--text);
       font-size: 13px;
+      line-height: 1.35;
     }
 
     .value {
-      color: var(--green);
+      color: var(--cyan);
       font-family: var(--mono);
       font-size: 12px;
-    }
-
-    select,
-    input[type="range"] {
-      width: 100%;
+      white-space: nowrap;
     }
 
     select {
-      min-height: 42px;
-      border: 1px solid var(--line-strong);
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius);
-      background: #091211;
+      background: var(--surface-2);
       color: var(--text);
       padding: 0 12px;
       outline: none;
@@ -237,833 +215,493 @@
 
     select:focus,
     input[type="range"]:focus-visible {
-      outline: 2px solid rgba(53, 216, 255, 0.62);
+      outline: 2px solid rgba(52, 215, 255, 0.62);
       outline-offset: 2px;
     }
 
     input[type="range"] {
+      width: 100%;
       accent-color: var(--green);
       cursor: pointer;
     }
 
     .hint {
-      margin: 6px 0 0;
-      color: var(--muted);
+      margin: 0;
+      color: var(--subtle);
       font-size: 12px;
-      line-height: 1.45;
+      line-height: 1.4;
     }
 
-    .results {
-      display: grid;
-      gap: 18px;
-    }
-
-    .hero-metrics {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.58fr);
-      gap: 18px;
-    }
-
-    .total-card {
-      padding: 22px;
-      min-height: 216px;
+    .total-panel {
+      min-height: 210px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin: 4px -20px 0;
+      padding: 26px 20px;
+      background:
+        linear-gradient(135deg, rgba(52, 215, 255, 0.08), transparent 42%),
+        var(--surface-2);
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      border-color: rgba(102, 255, 154, 0.28);
-      background:
-        linear-gradient(135deg, rgba(102, 255, 154, 0.10), transparent 52%),
-        rgba(16, 25, 24, 0.9);
+      align-items: center;
+      justify-content: center;
+      text-align: center;
     }
 
-    .metric-caption {
+    .config.highlight .total-panel {
+      background:
+        linear-gradient(135deg, rgba(114, 242, 154, 0.11), transparent 44%),
+        var(--surface-2);
+    }
+
+    .total-label {
       margin: 0;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
       text-transform: uppercase;
     }
 
     .total-value {
       margin: 12px 0 0;
-      color: var(--text);
       font-family: var(--mono);
-      font-size: clamp(54px, 8vw, 96px);
+      font-size: clamp(54px, 8vw, 88px);
       font-weight: 800;
-      line-height: 0.98;
+      line-height: 1;
     }
 
     .total-value small {
       color: var(--muted);
-      font-size: 0.24em;
+      font-size: 0.26em;
       font-weight: 500;
     }
 
-    .delta-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-top: 18px;
-    }
-
-    .delta {
-      border-radius: 999px;
-      padding: 8px 11px;
-      background: rgba(102, 255, 154, 0.12);
-      color: var(--green);
+    .rate {
+      margin: 12px 0 0;
+      color: var(--muted);
       font-family: var(--mono);
       font-size: 13px;
     }
 
-    .delta.negative {
-      background: rgba(255, 107, 107, 0.12);
-      color: var(--red);
-    }
-
-    .delta-text {
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .stack-card {
-      padding: 18px;
-    }
-
-    .mini-grid {
+    .breakdown {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .mini-metric {
-      min-height: 92px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 12px;
-      background: var(--panel-2);
-    }
-
-    .mini-metric span {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .mini-metric strong {
-      display: block;
-      margin-top: 8px;
-      font-family: var(--mono);
-      font-size: 22px;
-      line-height: 1.1;
-    }
-
-    .mini-metric em {
-      display: block;
-      margin-top: 4px;
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 11px;
-      font-style: normal;
-    }
-
-    .breakdown-card {
-      padding: 20px;
-    }
-
-    .card-heading {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-
-    .card-heading h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-
-    .card-heading p {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
       gap: 10px;
+    }
+
+    .metric {
+      min-height: 84px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .metric span {
       color: var(--muted);
       font-size: 12px;
+      line-height: 1.25;
     }
 
-    .legend-item {
-      display: inline-flex;
+    .metric strong {
+      font-family: var(--mono);
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    .metric.sync strong {
+      color: var(--cyan);
+    }
+
+    .metric.ttft strong {
+      color: var(--green);
+    }
+
+    .metric.decode strong {
+      color: var(--amber);
+    }
+
+    .metric.safety strong {
+      color: var(--muted);
+    }
+
+    .footer-resolution {
+      width: 100%;
+      border: 1px solid rgba(114, 242, 154, 0.36);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(90deg, rgba(114, 242, 154, 0.12), rgba(52, 215, 255, 0.08)),
+        rgba(16, 22, 25, 0.92);
+      box-shadow: var(--shadow);
+      padding: 18px 20px;
+      display: flex;
       align-items: center;
-      gap: 6px;
-    }
-
-    .swatch {
-      width: 10px;
-      height: 10px;
-      border-radius: 2px;
-      background: var(--color);
-    }
-
-    .timeline {
-      display: grid;
+      justify-content: space-between;
       gap: 18px;
     }
 
-    .timeline-row {
-      display: grid;
-      grid-template-columns: 92px minmax(0, 1fr);
-      gap: 12px;
-      align-items: center;
-    }
-
-    .row-label {
-      color: var(--muted);
-      font-size: 12px;
-      text-align: right;
-    }
-
-    .lane-wrap {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 6px;
-      padding: 8px 0;
-      border-left: 1px solid var(--line-strong);
-      background:
-        repeating-linear-gradient(
-          to right,
-          rgba(255, 255, 255, 0.08) 0,
-          rgba(255, 255, 255, 0.08) 1px,
-          transparent 1px,
-          transparent 12.5%
-        );
-    }
-
-    .stacked {
-      display: flex;
-      min-height: 42px;
-      overflow: hidden;
-      border-radius: 0 var(--radius) var(--radius) 0;
-    }
-
-    .segment {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 3px;
-      padding: 0 6px;
-      color: #05110f;
-      font-family: var(--mono);
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-    }
-
-    .segment span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .audio { background: var(--blue); }
-    .video { background: var(--cyan); }
-    .ttft { background: var(--green); }
-    .decode { background: #a8f07d; }
-    .safety { background: var(--amber); }
-    .idle { background: rgba(255, 255, 255, 0.10); color: var(--muted); }
-
-    .parallel-lanes {
-      display: grid;
-      gap: 6px;
-    }
-
-    .parallel-lane {
-      display: grid;
-      grid-template-columns: 54px minmax(0, 1fr);
-      gap: 8px;
-      align-items: center;
-      min-height: 30px;
-    }
-
-    .lane-name {
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 11px;
-      text-align: right;
-    }
-
-    .parallel-track {
-      display: flex;
-      min-height: 30px;
-      overflow: hidden;
-      border-radius: 0 var(--radius) var(--radius) 0;
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    .axis {
-      display: grid;
-      grid-template-columns: 92px minmax(0, 1fr);
-      gap: 12px;
-      margin-top: 2px;
-    }
-
-    .axis-line {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 11px;
-      padding-left: 1px;
-    }
-
-    .component-grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 18px;
-    }
-
-    .component {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 11px;
-      background: var(--panel-2);
-    }
-
-    .component span {
-      display: block;
-      min-height: 31px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.3;
-    }
-
-    .component strong {
-      display: block;
-      margin-top: 8px;
-      font-family: var(--mono);
-      font-size: 16px;
-    }
-
-    .recommendation {
-      padding: 18px;
-      border-color: rgba(53, 216, 255, 0.34);
-      background:
-        linear-gradient(135deg, rgba(53, 216, 255, 0.10), transparent 45%),
-        rgba(16, 25, 24, 0.9);
-    }
-
-    .recommendation h2 {
-      margin: 0 0 10px;
-      font-size: 16px;
-    }
-
-    .recommendation p {
+    .footer-resolution p {
       margin: 0;
-      color: var(--soft);
-      line-height: 1.55;
-      font-size: 14px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
     }
 
-    .formula {
-      margin-top: 18px;
-      padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #07100f;
-      color: var(--muted);
+    .winner-label {
+      flex: 0 0 auto;
+      border: 1px solid rgba(114, 242, 154, 0.42);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: var(--green);
       font-family: var(--mono);
       font-size: 12px;
-      line-height: 1.6;
-      overflow-x: auto;
+      white-space: nowrap;
     }
 
-    @media (max-width: 1080px) {
-      .layout,
-      .hero-metrics {
-        grid-template-columns: 1fr;
+    @media (max-width: 980px) {
+      .header,
+      .comparison,
+      .footer-resolution {
+        flex-direction: column;
       }
 
-      .controls {
-        position: static;
-      }
-
-      .component-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .header-badge {
+        text-align: left;
       }
     }
 
-    @media (max-width: 680px) {
+    @media (max-width: 560px) {
       .page {
         padding: 18px;
       }
 
-      .topbar {
-        display: block;
-      }
-
-      .baseline-chip {
-        margin-top: 16px;
-        text-align: left;
-      }
-
-      .timeline-row,
-      .axis {
-        grid-template-columns: 1fr;
-      }
-
-      .row-label {
-        text-align: left;
-      }
-
-      .component-grid,
-      .mini-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .card-heading {
-        align-items: flex-start;
+      .config-header {
         flex-direction: column;
       }
 
-      .legend {
-        justify-content: flex-start;
+      .breakdown {
+        grid-template-columns: 1fr;
+      }
+
+      .total-panel {
+        min-height: 178px;
       }
     }
   </style>
 </head>
 <body>
   <main class="page">
-    <header class="topbar">
-      <div class="title-block">
-        <p class="eyebrow">Edge-VLA-Micro / profilatore GitHub Pages</p>
-        <h1>Edge-VLA Edge Autonomy Latency Profiler</h1>
-        <p class="subtitle">
-          Simula l'impatto di ASR, cattura video, prefill VLM, decode e safety guardrail sulla latenza
-          end-to-end di un drone autonomo guidato da IA edge.
+    <header class="header">
+      <div class="header-copy">
+        <p class="eyebrow">Edge-VLA / test A/B di latenza</p>
+        <h1>Edge-VLA Autonomy Latency Profiler</h1>
+        <p class="intro">
+          Confronto diretto tra la baseline software Mac SITL e una architettura futura Jetson / TensorRT.
+          Ogni configurazione e' indipendente: modifica ASR, pipeline visiva, memoria VLM e token generati.
         </p>
       </div>
-      <div class="baseline-chip" aria-label="Baseline non ottimizzata">
-        <span>Baseline non ottimizzata</span>
-        <strong>8.79 s</strong>
-      </div>
+      <div class="header-badge">GitHub Pages<br>HTML autonomo</div>
     </header>
 
-    <section class="layout">
-      <aside class="panel controls" aria-label="Configurazione input">
-        <div class="panel-header">
-          <h2>Configurazione input</h2>
-          <p>Regola i componenti della pipeline e confronta il risultato con la baseline misurata.</p>
+    <section class="comparison" aria-label="Confronto configurazioni">
+      <article class="config" data-config="a">
+        <div class="config-header">
+          <div>
+            <h2 class="config-title">Configurazione A</h2>
+            <p class="config-subtitle">Baseline software attuale: Mac SITL, frame Full HD, output JSON completo.</p>
+          </div>
+          <span class="status-pill" id="status-a">Riferimento</span>
         </div>
+        <div class="config-body">
+          <div class="controls">
+            <div class="field">
+              <label for="asr-a">Modello ASR</label>
+              <select id="asr-a" data-field="asr">
+                <option value="mac" selected>faster-whisper su Mac (4.0s)</option>
+                <option value="jetson">TensorRT Whisper su Jetson (0.1s)</option>
+              </select>
+            </div>
 
-        <div class="control-section">
-          <div class="section-title">
-            <h3>Percorso audio</h3>
-            <span class="section-tag">Whisper</span>
+            <div class="field">
+              <label for="vision-a">Pipeline visiva</label>
+              <select id="vision-a" data-field="vision">
+                <option value="full" selected>Full HD 1080p (460ms)</option>
+                <option value="crop">Ritaglio centrale 224x224 (35ms)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="memory-a">Memoria VLM</label>
+              <select id="memory-a" data-field="memory">
+                <option value="fp16" selected>FP16 (Precisione Standard)</option>
+                <option value="int4">INT4 (Quantizzato TensorRT)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="tokens-a">
+                Output generato
+                <span class="value" id="tokens-label-a">80 token</span>
+              </label>
+              <input id="tokens-a" data-field="tokens" type="range" min="1" max="100" step="1" value="80">
+              <p class="hint">1 token = codice compresso, 80 token = JSON completo.</p>
+            </div>
           </div>
-          <div class="field">
-            <label for="whisperModel">Modello</label>
-            <select id="whisperModel">
-              <option value="tiny">Tiny</option>
-              <option value="base">Base</option>
-              <option value="small">Small</option>
-              <option value="large">Large</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="audioEngine">Engine</label>
-            <select id="audioEngine">
-              <option value="standard">Standard PyTorch (Lento)</option>
-              <option value="optimized" selected>faster-whisper CTranslate2 (Ottimizzato)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="audioDuration">
-              Durata audio
-              <span class="value" id="audioDurationValue">3.0 s</span>
-            </label>
-            <input id="audioDuration" type="range" min="1" max="5" step="0.1" value="3">
-          </div>
+
+          <section class="total-panel" aria-label="Latenza totale configurazione A">
+            <p class="total-label">Latenza totale</p>
+            <div class="total-value"><span id="total-a">0.00</span><small> s</small></div>
+            <p class="rate" id="rate-a">0.0 Hz</p>
+          </section>
+
+          <section class="breakdown" aria-label="Breakdown configurazione A">
+            <div class="metric sync">
+              <span>Sync Audio/Video</span>
+              <strong id="sync-a">0 ms</strong>
+            </div>
+            <div class="metric ttft">
+              <span>TTFT</span>
+              <strong id="ttft-a">0 ms</strong>
+            </div>
+            <div class="metric decode">
+              <span>Decodifica</span>
+              <strong id="decode-a">0 ms</strong>
+            </div>
+            <div class="metric safety">
+              <span>Sicurezza</span>
+              <strong id="safety-a">37 ms</strong>
+            </div>
+          </section>
         </div>
+      </article>
 
-        <div class="control-section">
-          <div class="section-title">
-            <h3>Percorso visivo</h3>
-            <span class="section-tag">Capture</span>
+      <article class="config highlight" data-config="b">
+        <div class="config-header">
+          <div>
+            <h2 class="config-title">Configurazione B</h2>
+            <p class="config-subtitle">Architettura futura: Jetson / TensorRT, ritaglio aggressivo, risposta compressa.</p>
           </div>
-          <div class="field">
-            <label for="captureResolution">Risoluzione cattura</label>
-            <select id="captureResolution">
-              <option value="1920x1080">1920x1080 (Full HD)</option>
-              <option value="448x448">448x448 (Medium)</option>
-              <option value="224x224" selected>224x224 (Aggressive Crop)</option>
-            </select>
-          </div>
+          <span class="status-pill" id="status-b">Obiettivo</span>
         </div>
+        <div class="config-body">
+          <div class="controls">
+            <div class="field">
+              <label for="asr-b">Modello ASR</label>
+              <select id="asr-b" data-field="asr">
+                <option value="mac">faster-whisper su Mac (4.0s)</option>
+                <option value="jetson" selected>TensorRT Whisper su Jetson (0.1s)</option>
+              </select>
+            </div>
 
-        <div class="control-section">
-          <div class="section-title">
-            <h3>Motore VLM</h3>
-            <span class="section-tag">Cognition</span>
+            <div class="field">
+              <label for="vision-b">Pipeline visiva</label>
+              <select id="vision-b" data-field="vision">
+                <option value="full">Full HD 1080p (460ms)</option>
+                <option value="crop" selected>Ritaglio centrale 224x224 (35ms)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="memory-b">Memoria VLM</label>
+              <select id="memory-b" data-field="memory">
+                <option value="fp16">FP16 (Precisione Standard)</option>
+                <option value="int4" selected>INT4 (Quantizzato TensorRT)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="tokens-b">
+                Output generato
+                <span class="value" id="tokens-label-b">1 token</span>
+              </label>
+              <input id="tokens-b" data-field="tokens" type="range" min="1" max="100" step="1" value="1">
+              <p class="hint">1 token = codice compresso, 80 token = JSON completo.</p>
+            </div>
           </div>
-          <div class="field">
-            <label for="vlmParams">
-              Parametri modello
-              <span class="value" id="vlmParamsValue">2.0 B</span>
-            </label>
-            <input id="vlmParams" type="range" min="0.5" max="8" step="0.1" value="2">
-          </div>
-          <div class="field">
-            <label for="precision">Precisione / Quantizzazione</label>
-            <select id="precision">
-              <option value="fp16">FP16 (16-bit)</option>
-              <option value="int8">INT8 (8-bit)</option>
-              <option value="int4" selected>INT4 (4-bit)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="outputTokens">
-              Output atteso
-              <span class="value" id="outputTokensValue">80 token</span>
-            </label>
-            <input id="outputTokens" type="range" min="1" max="150" step="1" value="80">
-            <p class="hint">Imposta 1 token per simulare il sistema a codici compressi.</p>
-          </div>
+
+          <section class="total-panel" aria-label="Latenza totale configurazione B">
+            <p class="total-label">Latenza totale</p>
+            <div class="total-value"><span id="total-b">0.00</span><small> s</small></div>
+            <p class="rate" id="rate-b">0.0 Hz</p>
+          </section>
+
+          <section class="breakdown" aria-label="Breakdown configurazione B">
+            <div class="metric sync">
+              <span>Sync Audio/Video</span>
+              <strong id="sync-b">0 ms</strong>
+            </div>
+            <div class="metric ttft">
+              <span>TTFT</span>
+              <strong id="ttft-b">0 ms</strong>
+            </div>
+            <div class="metric decode">
+              <span>Decodifica</span>
+              <strong id="decode-b">0 ms</strong>
+            </div>
+            <div class="metric safety">
+              <span>Sicurezza</span>
+              <strong id="safety-b">37 ms</strong>
+            </div>
+          </section>
         </div>
-      </aside>
-
-      <section class="results" aria-label="Metriche output">
-        <div class="hero-metrics">
-          <article class="panel total-card">
-            <div>
-              <p class="metric-caption">Latenza totale end-to-end</p>
-              <div class="total-value"><span id="totalSeconds">0.00</span><small> s</small></div>
-            </div>
-            <div class="delta-row">
-              <span class="delta" id="deltaPercent">0%</span>
-              <span class="delta-text" id="deltaText">rispetto alla baseline</span>
-            </div>
-          </article>
-
-          <article class="panel stack-card">
-            <div class="mini-grid">
-              <div class="mini-metric">
-                <span>Blocco sync</span>
-                <strong id="syncMetric">0 ms</strong>
-                <em>max(audio, video)</em>
-              </div>
-              <div class="mini-metric">
-                <span>Patch visive</span>
-                <strong id="patchMetric">0</strong>
-                <em>pixel / 196</em>
-              </div>
-              <div class="mini-metric">
-                <span>Modello VLM</span>
-                <strong id="modelSizeMetric">0 GB</strong>
-                <em>parametri x byte</em>
-              </div>
-              <div class="mini-metric">
-                <span>Velocita' decode</span>
-                <strong id="decodeThroughputMetric">0 tok/s</strong>
-                <em>simulato su 100 GB/s</em>
-              </div>
-            </div>
-          </article>
-        </div>
-
-        <article class="panel breakdown-card">
-          <div class="card-heading">
-            <div>
-              <h2>Scomposizione temporale</h2>
-              <p>Audio e video partono in parallelo; TTFT, decode e safety seguono in sequenza.</p>
-            </div>
-            <div class="legend" aria-label="Legenda grafico">
-              <span class="legend-item"><span class="swatch" style="--color: var(--blue)"></span>Audio</span>
-              <span class="legend-item"><span class="swatch" style="--color: var(--cyan)"></span>Video</span>
-              <span class="legend-item"><span class="swatch" style="--color: var(--green)"></span>TTFT</span>
-              <span class="legend-item"><span class="swatch" style="--color: #a8f07d"></span>Decode</span>
-              <span class="legend-item"><span class="swatch" style="--color: var(--amber)"></span>Guardrail</span>
-            </div>
-          </div>
-
-          <div class="timeline" role="img" aria-label="Grafico a barre della latenza attuale e baseline">
-            <div class="timeline-row">
-              <div class="row-label">Baseline</div>
-              <div class="lane-wrap">
-                <div class="parallel-lanes" id="baselineSync"></div>
-                <div class="stacked" id="baselineSequential"></div>
-              </div>
-            </div>
-            <div class="timeline-row">
-              <div class="row-label">Attuale</div>
-              <div class="lane-wrap">
-                <div class="parallel-lanes" id="currentSync"></div>
-                <div class="stacked" id="currentSequential"></div>
-              </div>
-            </div>
-            <div class="axis" aria-hidden="true">
-              <div></div>
-              <div class="axis-line" id="axisLabels"></div>
-            </div>
-          </div>
-
-          <div class="component-grid">
-            <div class="component">
-              <span>Audio ASR</span>
-              <strong id="audioMs">0 ms</strong>
-            </div>
-            <div class="component">
-              <span>Video capture</span>
-              <strong id="videoMs">0 ms</strong>
-            </div>
-            <div class="component">
-              <span>VLM TTFT / Prefill</span>
-              <strong id="ttftMs">0 ms</strong>
-            </div>
-            <div class="component">
-              <span>VLM Decode</span>
-              <strong id="decodeMs">0 ms</strong>
-            </div>
-            <div class="component">
-              <span>Guardrail safety</span>
-              <strong id="safetyMs">36.9 ms</strong>
-            </div>
-          </div>
-
-          <pre class="formula">Latenza totale = max(Audio, Video) + VLM TTFT + VLM Decode + Safety</pre>
-        </article>
-
-        <article class="panel recommendation">
-          <h2>Raccomandazione architetturale</h2>
-          <p id="recommendationText"></p>
-        </article>
-      </section>
+      </article>
     </section>
+
+    <footer class="footer-resolution" aria-live="polite">
+      <p id="resolution-text">Calcolo confronto...</p>
+      <span class="winner-label" id="winner-label">A/B</span>
+    </footer>
   </main>
 
   <script>
-    const BASELINE = {
-      audio: 4000,
-      video: 461,
-      ttft: 3900,
-      decode: 797,
-      safety: 37,
-      total: 8795
-    };
+    const SAFETY_MS = 37;
 
-    const WHISPER_PARAMS_B = {
-      tiny: 0.039,
-      base: 0.074,
-      small: 0.244,
-      large: 1.5
-    };
-
-    const RESOLUTIONS = {
-      "1920x1080": { width: 1920, height: 1080, latency: 461 },
-      "448x448": { width: 448, height: 448, latency: 90 },
-      "224x224": { width: 224, height: 224, latency: 35 }
-    };
-
-    const BYTES_PER_WEIGHT = {
-      fp16: 2,
-      int8: 1,
-      int4: 0.5
-    };
-
-    const MEMORY_BANDWIDTH_GBPS = 100;
-    const SAFETY_MS = 36.9;
-
-    const controls = {
-      whisperModel: document.getElementById("whisperModel"),
-      audioEngine: document.getElementById("audioEngine"),
-      audioDuration: document.getElementById("audioDuration"),
-      captureResolution: document.getElementById("captureResolution"),
-      vlmParams: document.getElementById("vlmParams"),
-      precision: document.getElementById("precision"),
-      outputTokens: document.getElementById("outputTokens")
-    };
-
-    const output = {
-      audioDurationValue: document.getElementById("audioDurationValue"),
-      vlmParamsValue: document.getElementById("vlmParamsValue"),
-      outputTokensValue: document.getElementById("outputTokensValue"),
-      totalSeconds: document.getElementById("totalSeconds"),
-      deltaPercent: document.getElementById("deltaPercent"),
-      deltaText: document.getElementById("deltaText"),
-      syncMetric: document.getElementById("syncMetric"),
-      patchMetric: document.getElementById("patchMetric"),
-      modelSizeMetric: document.getElementById("modelSizeMetric"),
-      decodeThroughputMetric: document.getElementById("decodeThroughputMetric"),
-      audioMs: document.getElementById("audioMs"),
-      videoMs: document.getElementById("videoMs"),
-      ttftMs: document.getElementById("ttftMs"),
-      decodeMs: document.getElementById("decodeMs"),
-      safetyMs: document.getElementById("safetyMs"),
-      baselineSync: document.getElementById("baselineSync"),
-      baselineSequential: document.getElementById("baselineSequential"),
-      currentSync: document.getElementById("currentSync"),
-      currentSequential: document.getElementById("currentSequential"),
-      axisLabels: document.getElementById("axisLabels"),
-      recommendationText: document.getElementById("recommendationText")
-    };
-
-    function formatMs(value) {
-      if (value >= 1000) {
-        return `${Math.round(value).toLocaleString("it-IT")} ms`;
+    const CONFIG = {
+      asr: {
+        mac: 4000,
+        jetson: 100
+      },
+      vision: {
+        full: 460,
+        crop: 35
+      },
+      ttft: {
+        full: 3800,
+        crop: 420
+      },
+      memoryMultiplier: {
+        fp16: 1,
+        int4: 0.5
+      },
+      decodePerToken: {
+        fp16: 40,
+        int4: 10
       }
-      return `${value.toFixed(value < 100 ? 1 : 0)} ms`;
-    }
+    };
 
-    function formatShortMs(value) {
-      return `${Math.round(value)} ms`;
-    }
-
-    function clampPercent(value) {
-      return Math.max(0.25, Math.min(100, value));
-    }
-
-    function segment(label, value, total, className) {
-      const width = clampPercent((value / total) * 100);
-      const hidden = width < 5 ? "" : `<span>${label} ${formatShortMs(value)}</span>`;
-      return `<div class="segment ${className}" style="width:${width}%">${hidden}</div>`;
-    }
-
-    function parallelLane(name, value, syncTotal, graphTotal, className) {
-      const activeWidth = clampPercent((value / graphTotal) * 100);
-      const idleWidth = Math.max(0, ((syncTotal - value) / graphTotal) * 100);
-      const activeLabel = activeWidth < 7 ? "" : `<span>${formatShortMs(value)}</span>`;
-      return `
-        <div class="parallel-lane">
-          <div class="lane-name">${name}</div>
-          <div class="parallel-track">
-            <div class="segment ${className}" style="width:${activeWidth}%">${activeLabel}</div>
-            <div class="segment idle" style="width:${idleWidth}%"></div>
-          </div>
-        </div>`;
-    }
-
-    function renderTimeline(targetSync, targetSequential, data, graphTotal) {
-      const sync = Math.max(data.audio, data.video);
-      targetSync.innerHTML =
-        parallelLane("audio", data.audio, sync, graphTotal, "audio") +
-        parallelLane("video", data.video, sync, graphTotal, "video");
-
-      targetSequential.innerHTML =
-        segment("sync", sync, graphTotal, "idle") +
-        segment("TTFT", data.ttft, graphTotal, "ttft") +
-        segment("decode", data.decode, graphTotal, "decode") +
-        segment("safety", data.safety, graphTotal, "safety");
-    }
-
-    function renderAxis(graphTotal) {
-      const labels = [];
-      const steps = 4;
-      for (let i = 0; i <= steps; i += 1) {
-        labels.push(`<span>${Math.round((graphTotal / steps) * i / 1000)} s</span>`);
+    const state = {
+      a: {
+        asr: document.getElementById("asr-a"),
+        vision: document.getElementById("vision-a"),
+        memory: document.getElementById("memory-a"),
+        tokens: document.getElementById("tokens-a"),
+        tokensLabel: document.getElementById("tokens-label-a"),
+        total: document.getElementById("total-a"),
+        rate: document.getElementById("rate-a"),
+        sync: document.getElementById("sync-a"),
+        ttft: document.getElementById("ttft-a"),
+        decode: document.getElementById("decode-a"),
+        safety: document.getElementById("safety-a"),
+        card: document.querySelector('[data-config="a"]'),
+        status: document.getElementById("status-a")
+      },
+      b: {
+        asr: document.getElementById("asr-b"),
+        vision: document.getElementById("vision-b"),
+        memory: document.getElementById("memory-b"),
+        tokens: document.getElementById("tokens-b"),
+        tokensLabel: document.getElementById("tokens-label-b"),
+        total: document.getElementById("total-b"),
+        rate: document.getElementById("rate-b"),
+        sync: document.getElementById("sync-b"),
+        ttft: document.getElementById("ttft-b"),
+        decode: document.getElementById("decode-b"),
+        safety: document.getElementById("safety-b"),
+        card: document.querySelector('[data-config="b"]'),
+        status: document.getElementById("status-b")
       }
-      output.axisLabels.innerHTML = labels.join("");
-    }
+    };
 
-    function calculate() {
-      const whisperParams = WHISPER_PARAMS_B[controls.whisperModel.value];
-      const duration = Number(controls.audioDuration.value);
-      const audioFactor = controls.audioEngine.value === "standard" ? 800 : 150;
-      const resolution = RESOLUTIONS[controls.captureResolution.value];
-      const vlmParams = Number(controls.vlmParams.value);
-      const bytesPerWeight = BYTES_PER_WEIGHT[controls.precision.value];
-      const tokens = Number(controls.outputTokens.value);
+    const resolutionText = document.getElementById("resolution-text");
+    const winnerLabel = document.getElementById("winner-label");
 
-      const audio = whisperParams * duration * audioFactor;
-      const video = resolution.latency;
-      const patches = (resolution.width * resolution.height) / 196;
-      const ttft = patches * vlmParams * 0.18;
-      const modelSizeGb = vlmParams * bytesPerWeight;
-      const decode = (modelSizeGb / MEMORY_BANDWIDTH_GBPS) * 1000 * tokens;
+    function calculate(side) {
+      const controls = state[side];
+      const audio = CONFIG.asr[controls.asr.value];
+      const video = CONFIG.vision[controls.vision.value];
       const sync = Math.max(audio, video);
+      const ttftBase = CONFIG.ttft[controls.vision.value];
+      const memoryMultiplier = CONFIG.memoryMultiplier[controls.memory.value];
+      const ttft = ttftBase * memoryMultiplier;
+      const tokens = Number(controls.tokens.value);
+      const decode = CONFIG.decodePerToken[controls.memory.value] * tokens;
       const total = sync + ttft + decode + SAFETY_MS;
-      const decodeThroughput = decode > 0 ? tokens / (decode / 1000) : 0;
+      const rateHz = 1000 / total;
 
       return {
         audio,
         video,
+        sync,
         ttft,
         decode,
         safety: SAFETY_MS,
-        sync,
         total,
-        patches,
-        modelSizeGb,
-        decodeThroughput,
-        tokens,
-        resolution
+        rateHz,
+        tokens
       };
     }
 
-    function updateRecommendation(data) {
-      const messages = [];
+    function formatMs(value) {
+      return `${Math.round(value).toLocaleString("it-IT")} ms`;
+    }
 
-      if (data.audio > data.video) {
-        messages.push("L'audio domina il blocco di sincronizzazione. Ridurre la risoluzione video e' utile per il TTFT, ma l'impatto reale sul ciclo si sblocchera' ottimizzando Whisper, per esempio passando a modelli minori o quantizzati.");
+    function formatSeconds(value) {
+      return (value / 1000).toFixed(value < 1000 ? 2 : 2);
+    }
+
+    function renderSide(side, data) {
+      const controls = state[side];
+      controls.tokensLabel.textContent = `${data.tokens} token`;
+      controls.total.textContent = formatSeconds(data.total);
+      controls.rate.textContent = `${data.rateHz.toFixed(2)} Hz teorici`;
+      controls.sync.textContent = formatMs(data.sync);
+      controls.ttft.textContent = formatMs(data.ttft);
+      controls.decode.textContent = formatMs(data.decode);
+      controls.safety.textContent = formatMs(data.safety);
+    }
+
+    function renderResolution(a, b) {
+      const winner = a.total <= b.total ? "A" : "B";
+      const winnerData = winner === "A" ? a : b;
+      const loserData = winner === "A" ? b : a;
+      const reduction = loserData.total === 0
+        ? 0
+        : ((loserData.total - winnerData.total) / loserData.total) * 100;
+
+      state.a.card.classList.toggle("highlight", winner === "A");
+      state.b.card.classList.toggle("highlight", winner === "B");
+      state.a.status.textContent = winner === "A" ? "Vincente" : "Riferimento";
+      state.b.status.textContent = winner === "B" ? "Vincente" : "Obiettivo";
+
+      if (Math.abs(a.total - b.total) < 1) {
+        winnerLabel.textContent = "Pareggio";
+        resolutionText.textContent = "Le due configurazioni hanno latenza equivalente entro 1 ms; il rateo di controllo resta invariato.";
+        return;
       }
 
-      if (data.tokens > 10 && data.decode > data.ttft) {
-        messages.push("Il Decode sta rallentando il sistema a causa dell'output testuale lungo. Prendi in considerazione l'adozione del sistema a codici compressi, impostando 1 token di output, per quasi azzerare questa fase.");
-      }
-
-      if (messages.length === 0 && data.ttft > data.decode) {
-        messages.push("Il TTFT e' la fase dominante del VLM. La leva principale e' ridurre le patch visive con crop/downsampling o usare un runtime compilato per accelerare il prefill.");
-      }
-
-      if (messages.length === 0) {
-        messages.push("La pipeline e' bilanciata: le ottimizzazioni successive dovrebbero essere misurate con telemetria reale, per evitare di spostare lavoro su una fase gia' marginale.");
-      }
-
-      output.recommendationText.textContent = messages.join(" ");
+      winnerLabel.textContent = `Vince ${winner}`;
+      resolutionText.textContent =
+        `La Configurazione ${winner} riduce la latenza del ${Math.round(reduction)}% rispetto alla Configurazione ${winner === "A" ? "B" : "A"}, ` +
+        `permettendo un rateo di controllo di ${winnerData.rateHz.toFixed(2)} Hz.`;
     }
 
     function update() {
-      const data = calculate();
-      const graphTotal = Math.max(BASELINE.total, data.total) * 1.04;
-      const delta = ((data.total - BASELINE.total) / BASELINE.total) * 100;
-      const deltaRounded = Math.round(delta);
-
-      output.audioDurationValue.textContent = `${Number(controls.audioDuration.value).toFixed(1)} s`;
-      output.vlmParamsValue.textContent = `${Number(controls.vlmParams.value).toFixed(1)} B`;
-      output.outputTokensValue.textContent = `${controls.outputTokens.value} token`;
-
-      output.totalSeconds.textContent = (data.total / 1000).toFixed(2);
-      output.deltaPercent.textContent = `${deltaRounded > 0 ? "+" : ""}${deltaRounded}%`;
-      output.deltaPercent.classList.toggle("negative", deltaRounded > 0);
-      output.deltaText.textContent = deltaRounded <= 0 ? "di latenza rispetto alla baseline" : "piu' lento della baseline";
-
-      output.syncMetric.textContent = formatMs(data.sync);
-      output.patchMetric.textContent = Math.round(data.patches).toLocaleString("it-IT");
-      output.modelSizeMetric.textContent = `${data.modelSizeGb.toFixed(2)} GB`;
-      output.decodeThroughputMetric.textContent = `${data.decodeThroughput.toFixed(1)} tok/s`;
-
-      output.audioMs.textContent = formatMs(data.audio);
-      output.videoMs.textContent = formatMs(data.video);
-      output.ttftMs.textContent = formatMs(data.ttft);
-      output.decodeMs.textContent = formatMs(data.decode);
-      output.safetyMs.textContent = formatMs(data.safety);
-
-      renderTimeline(output.baselineSync, output.baselineSequential, BASELINE, graphTotal);
-      renderTimeline(output.currentSync, output.currentSequential, data, graphTotal);
-      renderAxis(graphTotal);
-      updateRecommendation(data);
+      const a = calculate("a");
+      const b = calculate("b");
+      renderSide("a", a);
+      renderSide("b", b);
+      renderResolution(a, b);
     }
 
-    Object.values(controls).forEach((control) => {
-      control.addEventListener("input", update);
-      control.addEventListener("change", update);
+    ["a", "b"].forEach((side) => {
+      ["asr", "vision", "memory", "tokens"].forEach((name) => {
+        const control = state[side][name];
+        control.addEventListener("input", update);
+        control.addEventListener("change", update);
+      });
     });
 
     update();
