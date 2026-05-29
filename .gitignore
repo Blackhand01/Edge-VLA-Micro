@@ -219,6 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 blueprint.md
+!docs/blueprint.md
 
 # Local upstream checkouts / simulators
 third_party/
