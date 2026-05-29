@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import platform
 import time
 from pathlib import Path
 from typing import Optional
@@ -35,6 +36,7 @@ class CognitionEngine:
         temperature: float = 0.0,
         log_path: str | Path = "logs/cognition.log",
         generator: Optional[GeneratorFn] = None,
+        vlm_backend: str = "mlx",
     ) -> None:
         self.validator = validator or CommandValidator(
             DroneStateSnapshot(
@@ -44,7 +46,8 @@ class CognitionEngine:
             )
         )
         self.log_path = Path(log_path)
-        self.runtime = VLMRuntime(
+        self.runtime = build_vlm_runtime(
+            vlm_backend,
             model_id=model_id,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -180,6 +183,37 @@ class CognitionEngine:
     @staticmethod
     def _validation_status(validation_result: CognitionResult | CognitionError) -> str:
         return validation_status(validation_result)
+
+
+def build_vlm_runtime(
+    backend: str,
+    *,
+    model_id: str,
+    max_tokens: int,
+    temperature: float,
+    external_generator: Optional[GeneratorFn] = None,
+):
+    if external_generator is not None:
+        return VLMRuntime(
+            model_id=model_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            external_generator=external_generator,
+        )
+
+    if backend == "auto":
+        backend = "mlx" if platform.system() == "Darwin" else "dummy"
+    if backend == "mlx":
+        return VLMRuntime(model_id=model_id, max_tokens=max_tokens, temperature=temperature)
+    if backend == "dummy":
+        from src.perception.dummy_vlm_runtime import DummyVLMRuntime
+
+        return DummyVLMRuntime()
+    if backend == "tensorrt":
+        from src.perception.trt_vlm_runtime import TRTVLMRuntime
+
+        return TRTVLMRuntime()
+    raise ValueError(f"Unsupported VLM backend: {backend}")
 
 
 def main() -> None:

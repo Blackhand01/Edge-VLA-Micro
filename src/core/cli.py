@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trailing-silence", default=0.80, type=float, help="Seconds of silence used to end a voice command.")
     parser.add_argument("--max-record", default=5.0, type=float, help="Maximum seconds to record a single voice command.")
     parser.add_argument("--cognition-model", default=DEFAULT_MODEL_ID, help="MLX model id for CognitionEngine.")
+    parser.add_argument("--vlm-backend", choices=("auto", "mlx", "dummy", "tensorrt"), default="auto", help="VLM inference runtime.")
     parser.add_argument("--cognition-backend", choices=("process", "thread"), default="process", help="VLM isolation backend.")
     parser.add_argument("--cognition-timeout", default=75.0, type=float, help="Seconds before cognition is failed closed.")
     parser.add_argument("--max-cognition-failures", default=3, type=int, help="Consecutive cognition failures before emergency hold.")
@@ -84,7 +85,12 @@ def build_cognition_engine(args: argparse.Namespace) -> CognitionEngine:
             battery_remaining=None,
         )
     )
-    return CognitionEngine(validator=validator, model_id=args.cognition_model, temperature=0.0)
+    return CognitionEngine(
+        validator=validator,
+        model_id=args.cognition_model,
+        temperature=0.0,
+        vlm_backend=args.vlm_backend,
+    )
 
 
 def build_cognition_service(args: argparse.Namespace, cognition_engine: CognitionEngine) -> AsyncCognitionService:
@@ -93,6 +99,7 @@ def build_cognition_service(args: argparse.Namespace, cognition_engine: Cognitio
             model_id=args.cognition_model,
             temperature=0.0,
             timeout_s=args.cognition_timeout,
+            vlm_backend=args.vlm_backend,
         )
     return ThreadedCognitionService(cognition_engine)
 

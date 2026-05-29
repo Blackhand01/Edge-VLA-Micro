@@ -85,12 +85,14 @@ class ProcessCognitionService:
         temperature: float = 0.0,
         log_path: str | Path = "logs/cognition.log",
         timeout_s: float = 75.0,
+        vlm_backend: str = "mlx",
     ) -> None:
         self.model_id = model_id
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.log_path = str(log_path)
         self.timeout_s = timeout_s
+        self.vlm_backend = vlm_backend
         self._executor: Optional[ProcessPoolExecutor] = None
         self._prompt_engine = CognitionEngine(
             validator=_default_validator(),
@@ -98,6 +100,7 @@ class ProcessCognitionService:
             max_tokens=max_tokens,
             temperature=temperature,
             log_path=log_path,
+            vlm_backend=vlm_backend,
         )
 
     async def warmup(self) -> None:
@@ -158,7 +161,7 @@ class ProcessCognitionService:
                 max_workers=1,
                 mp_context=context,
                 initializer=_init_worker,
-                initargs=(self.model_id, self.max_tokens, self.temperature, self.log_path),
+                initargs=(self.model_id, self.max_tokens, self.temperature, self.log_path, self.vlm_backend),
             )
         return self._executor
 
@@ -191,7 +194,7 @@ def _default_validator() -> CommandValidator:
     )
 
 
-def _init_worker(model_id: str, max_tokens: int, temperature: float, log_path: str) -> None:
+def _init_worker(model_id: str, max_tokens: int, temperature: float, log_path: str, vlm_backend: str) -> None:
     global _WORKER_ENGINE  # noqa: PLW0603
     _WORKER_ENGINE = CognitionEngine(
         validator=_default_validator(),
@@ -199,12 +202,13 @@ def _init_worker(model_id: str, max_tokens: int, temperature: float, log_path: s
         max_tokens=max_tokens,
         temperature=temperature,
         log_path=log_path,
+        vlm_backend=vlm_backend,
     )
 
 
 def _worker_engine() -> CognitionEngine:
     if _WORKER_ENGINE is None:
-        _init_worker(DEFAULT_MODEL_ID, 128, 0.0, "logs/cognition.log")
+        _init_worker(DEFAULT_MODEL_ID, 128, 0.0, "logs/cognition.log", "mlx")
     assert _WORKER_ENGINE is not None
     return _WORKER_ENGINE
 
