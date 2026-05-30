@@ -143,6 +143,7 @@ async def monitor(args: argparse.Namespace) -> int:
     drone = System()
 
     try:
+        print(f"[INFO] Opening MAVSDK connection on {connection}", flush=True)
         await drone.connect(system_address=connection)
     except Exception as exc:
         _print_failure_diagnostics(f"MAVSDK could not open connection: {exc}", connection, port, preflight_udp_users)
@@ -157,9 +158,11 @@ async def monitor(args: argparse.Namespace) -> int:
     ]
 
     try:
+        print(f"[INFO] Waiting up to {args.timeout:.1f}s for MAVLink heartbeat...", flush=True)
         await _wait_until(lambda: state.connected, args.timeout, "heartbeat timeout")
         print("[INFO] Heartbeat received from PX4/MAVLink system.")
 
+        print(f"[INFO] Waiting up to {args.timeout:.1f}s for telemetry...", flush=True)
         await _wait_until(
             lambda: state.armed is not None and state.latitude_deg is not None,
             args.timeout,

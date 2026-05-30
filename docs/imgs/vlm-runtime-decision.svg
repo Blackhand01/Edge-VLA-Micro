@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="470" viewBox="0 0 1180 470" role="img" aria-labelledby="title desc">
+  <title id="title">Jetson VLM runtime decision matrix</title>
+  <desc id="desc">Qwen2-VL FP16 fails memory, Qwen2-VL AWQ fails AutoAWQ kernel compatibility, SmolVLM succeeds as current runtime.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #fff; stroke: #334155; stroke-width: 2; rx: 10; }
+      .bad { fill: #fee2e2; }
+      .warn { fill: #fef3c7; }
+      .good { fill: #dcfce7; }
+      .next { fill: #f3e8ff; }
+      .title { font: 700 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .label { font: 700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .text { font: 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .mono { font: 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #334155; }
+    </style>
+  </defs>
+  <rect class="bg" width="1180" height="470"/>
+  <text class="title" x="40" y="42">VLM runtime evidence on Jetson Orin Nano 8GB</text>
+
+  <rect class="card bad" x="40" y="80" width="250" height="310"/>
+  <text class="label" x="65" y="115">Qwen2-VL 2B FP16</text>
+  <text class="text" x="65" y="150">Direct CUDA placement</text>
+  <text class="mono" x="65" y="185">device_map="cuda"</text>
+  <text class="text" x="65" y="225">Result: rejected</text>
+  <text class="text" x="65" y="255">Does not fit reliable</text>
+  <text class="text" x="65" y="280">8GB UMA budget</text>
+  <text class="mono" x="65" y="325">NvMapMemAlloc error 12</text>
+
+  <rect class="card warn" x="330" y="80" width="250" height="310"/>
+  <text class="label" x="355" y="115">Qwen2-VL 2B AWQ</text>
+  <text class="text" x="355" y="150">4-bit candidate</text>
+  <text class="mono" x="355" y="185">AutoAWQ 0.2.9</text>
+  <text class="text" x="355" y="225">Result: rejected</text>
+  <text class="text" x="355" y="255">Runtime/kernel mismatch</text>
+  <text class="mono" x="355" y="295">missing awq_ext</text>
+  <text class="mono" x="355" y="325">rshift_cuda Half</text>
+
+  <rect class="card good" x="620" y="80" width="250" height="310"/>
+  <text class="label" x="645" y="115">SmolVLM 256M</text>
+  <text class="text" x="645" y="150">Native PyTorch/CUDA</text>
+  <text class="mono" x="645" y="185">single-device</text>
+  <text class="text" x="645" y="225">Result: accepted</text>
+  <text class="mono" x="645" y="260">elapsed: 2.51s</text>
+  <text class="mono" x="645" y="290">TPS: 6.38</text>
+  <text class="mono" x="645" y="320">CUDA peak: 0.60GB</text>
+
+  <rect class="card next" x="910" y="80" width="230" height="310"/>
+  <text class="label" x="935" y="115">Next</text>
+  <text class="text" x="935" y="150">Mac capture bridge</text>
+  <text class="text" x="935" y="180">Jetson inference API</text>
+  <text class="text" x="935" y="220">TensorRT/TensorRT-LLM</text>
+  <text class="text" x="935" y="250">only after stable</text>
+  <text class="text" x="935" y="280">runtime boundary</text>
+</svg>

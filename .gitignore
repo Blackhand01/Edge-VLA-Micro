@@ -223,4 +223,6 @@ blueprint.md
 
 # Local upstream checkouts / simulators
 third_party/
-docs/probableQ&A-Interview.md
+docs/personal-notes
+docs/jetson-hw-docs
+.DS_Store

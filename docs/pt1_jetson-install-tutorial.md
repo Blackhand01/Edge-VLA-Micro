@@ -1,11 +1,11 @@
 # Jetson Orin Nano Development Setup Guide
-**File Name:** `jetson-install-tutorial.md`  
+**File Name:** `docs/pt1_jetson-install-tutorial.md`
 **Version:** 1.1.0  
 **Date:** 29 Maggio 2026  
 **Target Hardware:** NVIDIA Jetson Orin Nano Developer Kit (8GB)  
 **Host Environment:** PC x86_64 assemblato con Ubuntu 22.04 LTS nativo  
 **Client Environment:** Mac con macOS per sviluppo headless via VS Code  
-
+![Jetson Orin Nano Developer Kit](imgs/jetson-orin-nano.jpeg)
 ---
 
 ## 1. Introduzione e Architettura del Sistema
@@ -15,6 +15,7 @@ Il mio setting:
 * **Target (Jetson Orin Nano):** Esegue **JetPack 6.2.2** (basato su Ubuntu 22.04 LTS), installato nativamente su un **SSD NVMe Crucial** ad alta velocità per azzerare i colli di bottiglia di I/O.
 * **Host Temporaneo (PC Linux x86_64):** Un PC assemblato alla buona configurato in dual boot nativo (*bare-metal*) con **Ubuntu 22.04 LTS**. Viene utilizzato esclusivamente come ponte hardware per effettuare il flashing a basso livello.
 * **Client (Mac):** La postazione di lavoro principale dal quale si scrive codice, si compilano moduli e si esegue il debug da remoto tramite sessioni SSH e Visual Studio Code.
+![Il PC Ubuntu assemblato per l'occasione](imgs/mac-pc_assembled-jetson.jpg)
 
 ### 1.1 Il perché di questo Setup (Il limite di macOS)
 Perché utilizzare due computer diversi anziché fare tutto da una sola macchina? 
@@ -23,24 +24,13 @@ La risposta è semplice: **l'NVIDIA SDK Manager non è compatibile con macOS**.
 In linea teorica, avendo a disposizione una workstation Linux potente, si potrebbe svolgere l'intero ciclo di vita (dal flashing allo sviluppo dei modelli) su un'unica macchina Ubuntu. Nel nostro caso, volendo mantenere il comodo ecosistema Apple per la scrittura del codice, si è resa necessaria una soluzione ibrida. 
 
 Per aggirare il blocco di macOS, è stato "riesumato" e riassemblato un vecchio PC x86_64 che si trovava in casa, sul quale è stato fatto girare Ubuntu in modo nativo.
-![Il PC Ubuntu assemblato per l'occasione](placeholder_foto_pc_assemblato.jpg)
-*(Placeholder Immagine: Il PC Ubuntu assemblato a pezzi utilizzato per il flashing)*
 
 Questo PC "frankenstein" ha avuto un unico scopo temporaneo: fare da tubo di comunicazione per scaricare JetPack e scriverlo fisicamente sull'SSD del Jetson tramite la porta USB-C. Una volta terminato il flashing, il PC Ubuntu esce di scena, e l'Orin Nano viene gestito in totale autonomia e comodità dal Mac tramite rete locale.
 
 ### Diagramma Logico delle Connessioni
 
 
-```
-
 ```text
-File jetson-install-tutorial.md aggiornato con successo.
-
-
-```
-
-
-text
 +---------------------------------------------------------+
 |                    Router Wi-Fi                         |
 +------------+-------------------------------+------------+
@@ -63,13 +53,11 @@ Interfaccia Linux for Tegra
 
 Prima di iniziare, assicurarsi di avere a disposizione i seguenti componenti hardware:
 1.  **NVIDIA Jetson Orin Nano Dev Kit (8GB):** Il modulo e la relativa carrier board.
-2.  **SSD NVMe Crucial (es. 500GB/1TB):** Rimosso dall'adattatore USB esterno e installato direttamente nello **slot M.2 Key M** situato sul fondo della carrier board del Jetson (sotto il modulo principale).
+2.  **SSD NVMe Crucial (es. 500GB/1TB):** Installato direttamente nello **slot M.2 Key M** situato sul fondo della carrier board del Jetson (sotto il modulo principale), serve cacciavite.
 3.  **Cavo USB-C dati ad alta velocità:** Utilizzare il cavo schermato in dotazione con l'adattatore NVMe Crucial. *Nota: Evitare cavi di ricarica standard per smartphone, poiché spesso sono privi delle linee dati interne.*
 4.  **Strumenti per il Cortocircuito (Jumper):** Una graffetta metallica sagomata a "U", una pinzetta da elettronica o un cacciavite a taglio di precisione.
 
-![Mappa Hardware del Jetson Orin Nano e Slot M.2 Inferiore](https://developer.nvidia.com/sites/default/files/akamai/embedded/images/jetson-orin-nano-dev-kit.png)
-*(Placeholder Immagine: Posizionamento dello slot NVMe sotto la scheda madre del Jetson)*
-
+![Mappa Hardware del Jetson Orin Nano e Slot M.2 Inferiore](imgs/jetson-orin-nano-memory-map.png)
 ---
 
 ## 3. Fase 1: Configurazione del PC Host Linux temporaneo
@@ -274,9 +262,6 @@ Host jetson-wifi
 ### 9.3 Risoluzione Errore "Nessuna route all'host" (Privacy macOS)
 
 Se VS Code si blocca mostrando l'errore `Nessuna route all'host`, i meccanismi di protezione di Apple stanno bloccando l'app.
-
-
-*(Placeholder Immagine: Rete Locale in Impostazioni di Sistema macOS)*
 
 **Procedura di Sblocco:**
 

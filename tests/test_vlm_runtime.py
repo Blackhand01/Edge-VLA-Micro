@@ -4,6 +4,12 @@ import unittest
 
 from src.perception.prompts import DEFAULT_QUANTIZED_MODEL_ID
 from src.perception.dummy_vlm_runtime import DummyVLMRuntime
+from src.perception.smolvlm_runtime import (
+    DEFAULT_SMOLVLM_MODEL_ID,
+    build_smolvlm_prompt,
+    normalize_smolvlm_response,
+    resolve_smolvlm_model_id,
+)
 from src.perception.vlm_runtime import VLMRuntime, resolve_model_id
 
 
@@ -32,6 +38,48 @@ class VLMRuntimeOptimizationTests(unittest.TestCase):
         self.assertIn('"command":"arm"', raw_response)
         self.assertGreaterEqual(profile.ttft_ms, 0.0)
         self.assertEqual(profile.fallback_reason, "dummy runtime")
+
+    def test_smolvlm_runtime_maps_mlx_default_model_to_jetson_model(self) -> None:
+        self.assertEqual(
+            resolve_smolvlm_model_id("mlx-community/Qwen2-VL-2B-Instruct-4bit"),
+            DEFAULT_SMOLVLM_MODEL_ID,
+        )
+
+    def test_smolvlm_prompt_extracts_intent_and_state(self) -> None:
+        raw_prompt = (
+            "CURRENT_DRONE_STATE:\n"
+            "{'state': 'GROUNDED'}\n\n"
+            "IMAGE_PATH:\n"
+            "<NO_IMAGE_AVAILABLE>\n\n"
+            "USER_INTENT:\n"
+            "Take off.\n\n"
+            "JSON:"
+        )
+
+        prompt = build_smolvlm_prompt(raw_prompt)
+
+        self.assertIn("USER_INTENT:\nTake off.", prompt)
+        self.assertIn("{'state': 'GROUNDED'}", prompt)
+        self.assertIn('"command":"arm"', prompt)
+
+    def test_smolvlm_response_falls_back_to_intent_for_truncated_json(self) -> None:
+        raw_prompt = "CURRENT_DRONE_STATE:\n{'state': 'AIRBORNE'}\n\nIMAGE_PATH:\nx\n\nUSER_INTENT:\nHold position.\n\nJSON:"
+
+        normalized = normalize_smolvlm_response('{"command":"hold",', raw_prompt)
+
+        self.assertIn('"command":"hold"', normalized)
+        self.assertIn('"target_found":true', normalized)
+
+    def test_smolvlm_response_clamps_move_fields(self) -> None:
+        raw_prompt = "USER_INTENT:\nMove forward.\n\nJSON:"
+
+        normalized = normalize_smolvlm_response(
+            '{"command":"move_velocity","target_found":true,"reasoning":"x","velocity_x":50}',
+            raw_prompt,
+        )
+
+        self.assertIn('"velocity_x":2.0', normalized)
+        self.assertIn('"yaw_deg":0.0', normalized)
 
 
 if __name__ == "__main__":

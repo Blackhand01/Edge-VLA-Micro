@@ -213,6 +213,10 @@ def build_vlm_runtime(
         from src.perception.trt_vlm_runtime import TRTVLMRuntime
 
         return TRTVLMRuntime()
+    if backend == "smolvlm":
+        from src.perception.smolvlm_runtime import SmolVLMRuntime
+
+        return SmolVLMRuntime(model_id=model_id, max_tokens=max_tokens, temperature=temperature)
     raise ValueError(f"Unsupported VLM backend: {backend}")
 
 

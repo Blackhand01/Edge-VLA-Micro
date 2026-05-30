@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="430" viewBox="0 0 1180 430" role="img" aria-labelledby="title desc">
+  <title id="title">Edge-VLA-Micro current Jetson pipeline</title>
+  <desc id="desc">Mac runs PX4 SITL and sends MAVLink to Jetson. Jetson runs SmolVLM cognition, safety validation, and MAVSDK control.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#1f2937"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2; rx: 10; }
+      .mac { fill: #e0f2fe; }
+      .jetson { fill: #dcfce7; }
+      .safety { fill: #fef3c7; }
+      .future { fill: #f3e8ff; stroke-dasharray: 8 6; }
+      .title { font: 700 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .label { font: 700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .text { font: 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .small { font: 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .arrow { stroke: #1f2937; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect class="bg" width="1180" height="430"/>
+  <text class="title" x="40" y="42">Current validated pipeline: Jetson inference and safety, Mac PX4 SITL</text>
+
+  <rect class="box mac" x="40" y="80" width="250" height="125"/>
+  <text class="label" x="65" y="115">MacBook</text>
+  <text class="text" x="65" y="145">PX4 SITL + jMAVSim</text>
+  <text class="small" x="65" y="170">UDP source: 192.168.55.100:14580</text>
+
+  <rect class="box jetson" x="405" y="80" width="250" height="125"/>
+  <text class="label" x="430" y="115">Jetson Orin Nano</text>
+  <text class="text" x="430" y="145">MAVSDK listener</text>
+  <text class="small" x="430" y="170">udpin://0.0.0.0:14540</text>
+
+  <rect class="box jetson" x="40" y="270" width="250" height="115"/>
+  <text class="label" x="65" y="305">Input for current tests</text>
+  <text class="text" x="65" y="335">scripted text commands</text>
+  <text class="small" x="65" y="360">audio/camera bridge not implemented yet</text>
+
+  <rect class="box jetson" x="405" y="270" width="250" height="115"/>
+  <text class="label" x="430" y="305">SmolVLM runtime</text>
+  <text class="text" x="430" y="335">single-device CUDA</text>
+  <text class="small" x="430" y="360">256M baseline, JSON normalization</text>
+
+  <rect class="box safety" x="760" y="270" width="185" height="115"/>
+  <text class="label" x="785" y="305">Safety</text>
+  <text class="text" x="785" y="335">Pydantic schema</text>
+  <text class="small" x="785" y="360">state-machine guardrails</text>
+
+  <rect class="box safety" x="1000" y="270" width="140" height="115"/>
+  <text class="label" x="1025" y="305">Action</text>
+  <text class="text" x="1025" y="335">DroneController</text>
+  <text class="small" x="1025" y="360">MAVSDK commands</text>
+
+  <rect class="box future" x="760" y="80" width="380" height="125"/>
+  <text class="label" x="785" y="115">Next bridge</text>
+  <text class="text" x="785" y="145">Mac audio + camera capture</text>
+  <text class="small" x="785" y="170">send transcript + frame to Jetson inference API</text>
+
+  <path class="arrow" d="M290,142 C330,142 365,142 405,142"/>
+  <text class="small" x="315" y="130">MAVLink UDP</text>
+
+  <path class="arrow" d="M290,327 C330,327 365,327 405,327"/>
+  <path class="arrow" d="M655,327 C695,327 720,327 760,327"/>
+  <path class="arrow" d="M945,327 C970,327 975,327 1000,327"/>
+  <path class="arrow" d="M1070,270 C1070,230 590,230 530,205"/>
+  <text class="small" x="875" y="230">validated command</text>
+</svg>
