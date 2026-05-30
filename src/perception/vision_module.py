@@ -91,7 +91,10 @@ class VisionModule:
     def _open_capture(self, cv2):
         if hasattr(cv2, "CAP_AVFOUNDATION"):
             try:
-                return cv2.VideoCapture(self.camera_index, cv2.CAP_AVFOUNDATION)
+                capture = cv2.VideoCapture(self.camera_index, cv2.CAP_AVFOUNDATION)
+                if capture.isOpened():
+                    return capture
+                capture.release()
             except TypeError:
                 pass
 

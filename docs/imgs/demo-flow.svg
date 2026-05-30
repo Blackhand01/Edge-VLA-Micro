@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="560" viewBox="0 0 1320 560" role="img" aria-labelledby="title desc">
+  <title id="title">Edge-VLA demo flow</title>
+  <desc id="desc">Mac smart sensor node sends voice text and camera frame to Jetson VLA core, which validates and sends MAVSDK commands to PX4 and QGroundControl.</desc>
+  <defs>
+    <style>
+      .bg { fill: #071013; }
+      .card { fill: #101a1f; stroke: #2f444c; stroke-width: 2; rx: 8; }
+      .card2 { fill: #0c1519; stroke: #3a535c; stroke-width: 2; rx: 8; }
+      .text { fill: #eef7f8; font-family: Inter, Arial, sans-serif; font-size: 24px; font-weight: 700; }
+      .small { fill: #a9bdc1; font-family: Inter, Arial, sans-serif; font-size: 17px; }
+      .mono { fill: #8fe9a8; font-family: Menlo, Consolas, monospace; font-size: 16px; }
+      .accent { fill: #34d7ff; }
+      .green { fill: #72f29a; }
+      .amber { fill: #ffd166; }
+      .red { fill: #ff6b6b; }
+      .line { stroke: #34d7ff; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .safe { stroke: #72f29a; stroke-width: 4; fill: none; marker-end: url(#arrow-green); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#34d7ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#72f29a"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1320" height="560"/>
+  <text class="text" x="42" y="56">Edge-VLA Micro: distributed voice-to-action demo</text>
+  <text class="small" x="42" y="88">Mac = sensing and ASR. Jetson = VLA reasoning, validation, and MAVSDK control.</text>
+
+  <rect class="card" x="42" y="145" width="250" height="230" rx="8"/>
+  <text class="text" x="68" y="188">Operator</text>
+  <text class="small" x="68" y="224">Voice command</text>
+  <text class="small" x="68" y="252">Live camera target</text>
+  <text class="mono" x="68" y="304">"Move toward</text>
+  <text class="mono" x="68" y="330"> the red object"</text>
+
+  <rect class="card2" x="365" y="110" width="290" height="300" rx="8"/>
+  <text class="text" x="392" y="154">Mac sensor node</text>
+  <text class="small" x="392" y="194">MLX Whisper ASR</text>
+  <text class="small" x="392" y="224">OpenCV camera capture</text>
+  <text class="small" x="392" y="254">Base64 JPEG payload</text>
+  <text class="mono" x="392" y="312">src.tools.drone_voice_app</text>
+  <text class="mono" x="392" y="342">/process_intent</text>
+
+  <rect class="card2" x="730" y="110" width="305" height="300" rx="8"/>
+  <text class="text" x="758" y="154">Jetson VLA core</text>
+  <text class="small" x="758" y="194">SmolVLM single-device CUDA</text>
+  <text class="small" x="758" y="224">HSV + RGB target guardrail</text>
+  <text class="small" x="758" y="254">Pydantic state validator</text>
+  <text class="mono" x="758" y="312">src.api.cognition_server</text>
+  <text class="mono" x="758" y="342">MAVSDK action dispatch</text>
+
+  <rect class="card" x="1110" y="145" width="168" height="230" rx="8"/>
+  <text class="text" x="1136" y="188">PX4 SITL</text>
+  <text class="small" x="1136" y="224">jMAVSim</text>
+  <text class="small" x="1136" y="252">QGroundControl</text>
+  <text class="mono" x="1136" y="304">ARMED</text>
+  <text class="mono" x="1136" y="330">OFFBOARD</text>
+
+  <path class="line" d="M 292 260 C 322 260, 332 260, 365 260"/>
+  <path class="line" d="M 655 260 C 688 260, 697 260, 730 260"/>
+  <path class="safe" d="M 1035 260 C 1070 260, 1080 260, 1110 260"/>
+
+  <rect x="380" y="444" width="575" height="56" rx="8" fill="#0b1215" stroke="#30454d" stroke-width="2"/>
+  <text class="small" x="402" y="479">Fail closed: invalid state, missing target, or malformed VLM output becomes reject/hold.</text>
+</svg>

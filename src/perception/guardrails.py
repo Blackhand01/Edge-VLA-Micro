@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Callable, Optional
 
 from src.safety.command_validator import DroneOperationalState, DroneStateSnapshot
@@ -180,30 +181,107 @@ def frame_contains_hsv_color(image_path: str, color: str) -> bool:
         logger.warning("SAFETY_OVERRIDE: TARGET_NOT_FOUND | OpenCV could not read frame: %s", image_path)
         return False
 
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    if color == "red":
-        lower_1 = np.array([0, 80, 50], dtype=np.uint8)
-        upper_1 = np.array([10, 255, 255], dtype=np.uint8)
-        lower_2 = np.array([170, 80, 50], dtype=np.uint8)
-        upper_2 = np.array([180, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower_1, upper_1) | cv2.inRange(hsv, lower_2, upper_2)
-    elif color == "blue":
-        lower = np.array([100, 80, 50], dtype=np.uint8)
-        upper = np.array([130, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
-    else:
+    mask = hsv_mask(cv2, np, frame, color)
+    if mask is None:
         return False
 
     matching_pixels = int(cv2.countNonZero(mask))
     total_pixels = int(mask.shape[0] * mask.shape[1])
     ratio = matching_pixels / total_pixels if total_pixels > 0 else 0.0
+    debug_path = write_hsv_debug_overlay(cv2, frame, mask, image_path, color, matching_pixels, ratio)
     logger.info(
-        "HSV target check: color=%s pixels=%d total=%d ratio=%.6f threshold_pixels=%d threshold_ratio=%.6f",
+        "HSV target check: color=%s pixels=%d total=%d ratio=%.6f threshold_pixels=%d threshold_ratio=%.6f debug=%s",
         color,
         matching_pixels,
         total_pixels,
         ratio,
         HSV_MIN_PIXELS,
         HSV_MIN_RATIO,
+        debug_path,
     )
     return matching_pixels >= HSV_MIN_PIXELS and ratio >= HSV_MIN_RATIO
+
+
+def hsv_mask(cv2, np, frame, color: str):  # noqa: ANN001
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    if color == "red":
+        lower_1 = np.array([0, 130, 80], dtype=np.uint8)
+        upper_1 = np.array([8, 255, 255], dtype=np.uint8)
+        lower_2 = np.array([174, 130, 80], dtype=np.uint8)
+        upper_2 = np.array([180, 255, 255], dtype=np.uint8)
+        hue_mask = cv2.inRange(hsv, lower_1, upper_1) | cv2.inRange(hsv, lower_2, upper_2)
+        return cv2.bitwise_and(hue_mask, red_dominance_mask(cv2, np, frame))
+    if color == "blue":
+        lower = np.array([100, 80, 50], dtype=np.uint8)
+        upper = np.array([130, 255, 255], dtype=np.uint8)
+        return cv2.inRange(hsv, lower, upper)
+    return None
+
+
+def red_dominance_mask(cv2, np, frame):  # noqa: ANN001
+    blue, green, red = cv2.split(frame)
+    red_i = red.astype(np.int16)
+    green_i = green.astype(np.int16)
+    blue_i = blue.astype(np.int16)
+    mask = (
+        (red_i >= 120)
+        & ((red_i - green_i) >= 45)
+        & ((red_i - blue_i) >= 50)
+        & ((red_i * 100) >= (green_i * 155))
+        & ((red_i * 100) >= (blue_i * 145))
+    )
+    return (mask.astype(np.uint8)) * 255
+
+
+def hsv_debug_overlay_path(image_path: str, color: str) -> Path:
+    path = Path(image_path)
+    return path.with_name(f"{path.stem}_{color}_hsv_debug.jpg")
+
+
+def write_hsv_debug_overlay(
+    cv2,  # noqa: ANN001
+    frame,  # noqa: ANN001
+    mask,  # noqa: ANN001
+    image_path: str,
+    color: str,
+    matching_pixels: int,
+    ratio: float,
+) -> Optional[Path]:
+    debug_path = hsv_debug_overlay_path(image_path, color)
+    overlay = frame.copy()
+    color_bgr = (0, 0, 255) if color == "red" else (255, 0, 0)
+    overlay[mask > 0] = color_bgr
+    annotated = cv2.addWeighted(frame, 0.65, overlay, 0.35, 0)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        largest = max(contours, key=cv2.contourArea)
+        x, y, width, height = cv2.boundingRect(largest)
+        cv2.rectangle(annotated, (x, y), (x + width, y + height), color_bgr, 2)
+        cv2.putText(
+            annotated,
+            f"{color} target pixels={matching_pixels} ratio={ratio:.4f}",
+            (max(0, x), max(20, y - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            color_bgr,
+            1,
+            cv2.LINE_AA,
+        )
+    else:
+        cv2.putText(
+            annotated,
+            f"{color} target absent pixels={matching_pixels} ratio={ratio:.4f}",
+            (10, 24),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+    debug_path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(debug_path), annotated):
+        logger.warning("Failed to write HSV debug overlay to %s", debug_path)
+        return None
+    return debug_path

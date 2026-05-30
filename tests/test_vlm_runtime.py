@@ -81,6 +81,69 @@ class VLMRuntimeOptimizationTests(unittest.TestCase):
         self.assertIn('"velocity_x":2.0', normalized)
         self.assertIn('"yaw_deg":0.0', normalized)
 
+    def test_smolvlm_explicit_hold_overrides_wrong_parsed_command(self) -> None:
+        raw_prompt = (
+            "CURRENT_DRONE_STATE:\n{'state': 'GROUNDED'}\n\n"
+            "IMAGE_PATH:\nx\n\n"
+            "USER_INTENT:\nhand position Hold position.\n\n"
+            "JSON:"
+        )
+
+        normalized = normalize_smolvlm_response(
+            '{"command":"arm","target_found":true,"reasoning":"..."}',
+            raw_prompt,
+        )
+
+        self.assertIn('"command":"hold"', normalized)
+
+    def test_smolvlm_vague_text_does_not_allow_critical_model_command(self) -> None:
+        raw_prompt = (
+            "CURRENT_DRONE_STATE:\n{'state': 'GROUNDED'}\n\n"
+            "IMAGE_PATH:\nx\n\n"
+            "USER_INTENT:\nWe need to rush.\n\n"
+            "JSON:"
+        )
+
+        normalized = normalize_smolvlm_response(
+            '{"command":"arm","target_found":true,"reasoning":"..."}',
+            raw_prompt,
+        )
+
+        self.assertIn('"command":"hold"', normalized)
+        self.assertIn("without an explicit operator command", normalized)
+
+    def test_smolvlm_moving_toward_red_object_maps_to_velocity(self) -> None:
+        raw_prompt = (
+            "CURRENT_DRONE_STATE:\n{'state': 'AIRBORNE'}\n\n"
+            "IMAGE_PATH:\nx\n\n"
+            "USER_INTENT:\nMoving to our red object.\n\n"
+            "JSON:"
+        )
+
+        normalized = normalize_smolvlm_response(
+            '{"command":"hold","target_found":true,"reasoning":"..."}',
+            raw_prompt,
+        )
+
+        self.assertIn('"command":"move_velocity"', normalized)
+        self.assertIn('"velocity_x":0.5', normalized)
+
+    def test_smolvlm_one_meter_per_second_maps_to_one_meter_velocity(self) -> None:
+        raw_prompt = (
+            "CURRENT_DRONE_STATE:\n{'state': 'AIRBORNE'}\n\n"
+            "IMAGE_PATH:\nx\n\n"
+            "USER_INTENT:\nMove forward one meter per second.\n\n"
+            "JSON:"
+        )
+
+        normalized = normalize_smolvlm_response(
+            '{"command":"hold","target_found":true,"reasoning":"..."}',
+            raw_prompt,
+        )
+
+        self.assertIn('"command":"move_velocity"', normalized)
+        self.assertIn('"velocity_x":1.0', normalized)
+
 
 if __name__ == "__main__":
     unittest.main()

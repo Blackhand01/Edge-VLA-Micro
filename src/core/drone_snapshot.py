@@ -8,6 +8,7 @@ from src.safety.command_validator import DroneOperationalState, DroneStateSnapsh
 class DroneSnapshotBuilder:
     def __init__(self) -> None:
         self.has_been_airborne = False
+        self._previous_armed: bool | None = None
 
     def build(self, controller_state) -> DroneStateSnapshot:
         connected = bool(controller_state.connected)
@@ -16,6 +17,9 @@ class DroneSnapshotBuilder:
         flight_mode = controller_state.flight_mode
         if in_air:
             self.has_been_airborne = True
+        if armed and self._previous_armed is False and not in_air:
+            self.has_been_airborne = False
+        self._previous_armed = armed
 
         return DroneStateSnapshot(
             state=self._operational_state(connected, armed, in_air, flight_mode),

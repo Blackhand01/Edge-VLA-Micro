@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Red target debug overlay</title>
+  <desc id="desc">Illustration of the HSV and RGB red target guardrail: raw camera frame, candidate red pixels, and accepted bounding box.</desc>
+  <defs>
+    <style>
+      .bg { fill: #071013; }
+      .panel { fill: #101a1f; stroke: #2f444c; stroke-width: 2; rx: 8; }
+      .text { fill: #eef7f8; font-family: Inter, Arial, sans-serif; font-size: 22px; font-weight: 700; }
+      .small { fill: #a9bdc1; font-family: Inter, Arial, sans-serif; font-size: 15px; }
+      .mono { fill: #72f29a; font-family: Menlo, Consolas, monospace; font-size: 14px; }
+      .red { fill: #f73535; }
+      .skin { fill: #bb6b57; }
+      .dark { fill: #15191d; }
+      .box { fill: none; stroke: #ff3030; stroke-width: 4; }
+      .reject { fill: none; stroke: #ffd166; stroke-width: 3; stroke-dasharray: 8 8; }
+      .arrow { stroke: #34d7ff; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#34d7ff"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="960" height="540"/>
+  <text class="text" x="34" y="46">Target guardrail debug overlay</text>
+  <text class="small" x="34" y="74">The real demo writes this image to tmp/last_detection_debug.jpg after a visual command.</text>
+
+  <rect class="panel" x="42" y="112" width="260" height="330" rx="8"/>
+  <text class="text" x="68" y="150">Raw frame</text>
+  <rect class="dark" x="72" y="182" width="200" height="185" rx="6"/>
+  <circle class="red" cx="225" cy="215" r="22"/>
+  <rect class="skin" x="92" y="270" width="86" height="56" rx="18"/>
+  <rect class="red" x="84" y="360" width="28" height="28" rx="6"/>
+  <text class="small" x="72" y="404">Camera frame from MacBook</text>
+
+  <path class="arrow" d="M 315 276 C 350 276, 366 276, 400 276"/>
+
+  <rect class="panel" x="416" y="112" width="260" height="330" rx="8"/>
+  <text class="text" x="442" y="150">Color filter</text>
+  <rect class="dark" x="446" y="182" width="200" height="185" rx="6"/>
+  <circle class="red" cx="599" cy="215" r="22"/>
+  <rect class="reject" x="466" y="270" width="86" height="56" rx="18"/>
+  <rect class="red" x="458" y="360" width="28" height="28" rx="6"/>
+  <text class="small" x="446" y="404">HSV red + R&gt;G/B dominance</text>
+
+  <path class="arrow" d="M 689 276 C 724 276, 740 276, 774 276"/>
+
+  <rect class="panel" x="790" y="112" width="128" height="330" rx="8"/>
+  <text class="text" x="814" y="150">Result</text>
+  <rect class="dark" x="812" y="182" width="84" height="185" rx="6"/>
+  <circle class="red" cx="860" cy="215" r="22"/>
+  <rect class="box" x="835" y="190" width="50" height="50"/>
+  <text class="mono" x="808" y="404">target_found=true</text>
+  <text class="mono" x="808" y="426">move_velocity</text>
+</svg>

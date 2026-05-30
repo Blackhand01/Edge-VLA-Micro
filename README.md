@@ -15,9 +15,16 @@ The recording below shows the Edge-VLA-Micro loop running with PX4 SITL, QGround
 
 Click the preview image to open the recording.
 
-<a href="docs/vla-edge.mov" target="_blank" rel="noopener noreferrer">
-  <img src="docs/qgroundcontrol.png" alt="Edge-VLA-Micro demo">
+<a href="docs/imgs/vla-edge.mov" target="_blank" rel="noopener noreferrer">
+  <img src="docs/imgs/qgroundcontrol.png" alt="Edge-VLA-Micro demo">
 </a>
+
+Current demo runbooks:
+
+- [PT3 - Demo: applicazione vocale Edge-VLA](docs/pt3-demo-voice-command-app.md)
+- [PT4 - demo checklist](docs/pt4-demo-checklist.md)
+
+![Edge-VLA demo flow](docs/imgs/demo-flow.svg)
 
 
 ## System Architecture
@@ -93,7 +100,7 @@ For non-visual commands such as `arm`, `takeoff`, `land`, and `hold`, the cognit
 The system was profiled on Apple Silicon UMA using per-token VLM instrumentation. The telemetry captures Time To First Token (TTFT), decode latency, generated token count, TPS, ASR time, vision capture time, safety validation time, and total loop latency in `logs/performance.csv`.
 
 <a href="https://blackhand01.github.io/Edge-VLA-Micro/" target="_blank" rel="noopener noreferrer">
-  <img src="docs/LatencyProfiler.png" alt="Open the interactive latency profiler">
+  <img src="docs/imgs/LatencyProfiler.png" alt="Open the interactive latency profiler">
 </a>
 
 Use the interactive latency profiler to simulate ASR, vision, VLM prefill, decode, and safety-guardrail tradeoffs directly from GitHub Pages. The profiler source is `docs/index.html`.
@@ -112,9 +119,9 @@ Observed averages from the current SITL run:
 
 The key systems result is that the symbolic safety layer is not the bottleneck. Pydantic validation plus HSV target gating remains small relative to ASR and VLM prefill, while ASR and TTFT dominate the control cycle. This supports the architectural decision to preserve deterministic guardrails while focusing optimization work on model-serving latency.
 
-![Average control-loop latency breakdown](docs/latency_pie_chart.png)
+![Average control-loop latency breakdown](docs/imgs/latency_pie_chart.png)
 
-![VLM decode throughput per inference run](docs/tps_bar_chart.png)
+![VLM decode throughput per inference run](docs/imgs/tps_bar_chart.png)
 
 ### Vision Pipeline Optimization Benchmark
 
@@ -214,6 +221,8 @@ From the repository root:
 
 ```bash
 ./scripts/run_jmavsim.sh
+mavlink stop -u 14580
+mavlink start -x -u 14580 -r 4000000 -m onboard -o 14540 -t 192.168.55.1
 ```
 
 Wait until PX4 reports that the simulator is connected and ready for takeoff.
@@ -279,8 +288,8 @@ python3 scripts/generate_charts.py --input logs/performance.csv --output-dir doc
 The script prints a Markdown-ready summary and writes:
 
 ```text
-docs/latency_pie_chart.png
-docs/tps_bar_chart.png
+docs/imgs/latency_pie_chart.png
+docs/imgs/tps_bar_chart.png
 ```
 
 ## Operational Safety Notes

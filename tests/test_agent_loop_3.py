@@ -137,3 +137,9 @@ class AgentLoopTests(unittest.IsolatedAsyncioTestCase):
 
         controller.state.in_air = False
         self.assertEqual(agent._build_drone_snapshot().state, DroneOperationalState.LANDED)
+
+        controller.state.armed = False
+        self.assertEqual(agent._build_drone_snapshot().state, DroneOperationalState.GROUNDED)
+
+        controller.state.armed = True
+        self.assertEqual(agent._build_drone_snapshot().state, DroneOperationalState.ARMED)

@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM-256M-Instruct"
 DEFAULT_IMAGE_SIZE = 384
 SYNTHETIC_IMAGE_PATH = Path("tmp/smolvlm_no_image.jpg")
+MOVE_INTENT_PHRASES = (
+    "move",
+    "moving",
+    "go",
+    "toward",
+    "towards",
+    "approach",
+    "follow",
+    "forward",
+    "backward",
+    "left",
+    "right",
+)
 
 
 class SmolVLMRuntime:
@@ -168,14 +181,34 @@ def build_smolvlm_prompt(raw_prompt: str) -> str:
 
 
 def normalize_smolvlm_response(model_response: str, raw_prompt: str) -> str:
+    user_intent = extract_section(raw_prompt, "USER_INTENT", "JSON") or raw_prompt
+    drone_state = extract_section(raw_prompt, "CURRENT_DRONE_STATE", "IMAGE_PATH")
+    explicit_command = explicit_command_from_intent(user_intent, drone_state)
     parsed = parse_complete_json_object(model_response)
     if parsed is not None:
         normalized = command_from_parsed_json(parsed)
         if normalized is not None:
+            if explicit_command is not None:
+                if normalized.get("command") == explicit_command.get("command"):
+                    return json.dumps(normalized, separators=(",", ":"))
+                return json.dumps(explicit_command, separators=(",", ":"))
+            if is_critical_command(str(normalized.get("command"))):
+                return json.dumps(
+                    {
+                        "command": "hold",
+                        "target_found": True,
+                        "reasoning": (
+                            "safety fallback: model proposed a critical command "
+                            "without an explicit operator command"
+                        ),
+                    },
+                    separators=(",", ":"),
+                )
             return json.dumps(normalized, separators=(",", ":"))
 
-    user_intent = extract_section(raw_prompt, "USER_INTENT", "JSON") or raw_prompt
-    drone_state = extract_section(raw_prompt, "CURRENT_DRONE_STATE", "IMAGE_PATH")
+    if explicit_command is not None:
+        return json.dumps(explicit_command, separators=(",", ":"))
+
     fallback = command_from_intent(user_intent, drone_state)
     fallback["reasoning"] = f"smolvlm fallback after malformed output: {compact_reason(model_response)}"
     return json.dumps(fallback, separators=(",", ":"))
@@ -214,13 +247,54 @@ def command_from_parsed_json(parsed: dict) -> Optional[dict[str, object]]:
     return normalized
 
 
+def explicit_command_from_intent(user_intent: str, drone_state: str) -> Optional[dict[str, object]]:
+    lowered = user_intent.lower()
+    state = drone_state.upper()
+    base: dict[str, object] = {
+        "target_found": True,
+        "reasoning": "deterministic command from explicit operator text",
+    }
+    if has_any_phrase(lowered, ("hold position", "hold", "hover", "stay", "stop")):
+        return {"command": "hold", **base}
+    if has_any_phrase(lowered, ("land", "landing")):
+        return {"command": "land", **base}
+    if has_any_phrase(lowered, ("disarm", "power off")):
+        return {"command": "disarm", **base}
+    if has_any_phrase(lowered, ("take off", "takeoff", "launch")):
+        if "GROUNDED" in state:
+            return {"command": "arm", **base, "reasoning": "takeoff requested while grounded; arm is the next valid action"}
+        return {"command": "takeoff", **base}
+    if has_word(lowered, "arm"):
+        return {"command": "arm", **base}
+    if has_any_phrase(lowered, MOVE_INTENT_PHRASES):
+        if "GROUNDED" in state:
+            return {"command": "arm", **base, "reasoning": "movement requested while grounded; arm is the next valid action"}
+        velocity_x = movement_speed_from_text(lowered)
+        if "backward" in lowered:
+            velocity_x = -velocity_x
+        velocity_y = -0.5 if "left" in lowered else 0.5 if "right" in lowered else 0.0
+        return {
+            "command": "move_velocity",
+            **base,
+            "velocity_x": velocity_x,
+            "velocity_y": velocity_y,
+            "velocity_z": 0.0,
+            "yaw_deg": 0.0,
+        }
+    return None
+
+
+def is_critical_command(command: str) -> bool:
+    return command in {"arm", "disarm", "takeoff", "land", "move_velocity"}
+
+
 def command_from_intent(user_intent: str, drone_state: str) -> dict[str, object]:
     lowered = user_intent.lower()
     state = drone_state.upper()
     base: dict[str, object] = {"target_found": True}
     if ("take off" in lowered or "takeoff" in lowered or "launch" in lowered) and "GROUNDED" in state:
         return {"command": "arm", **base}
-    if any(token in lowered for token in ("move", "forward", "backward", "left", "right")) and "GROUNDED" in state:
+    if any(token in lowered for token in MOVE_INTENT_PHRASES) and "GROUNDED" in state:
         return {"command": "arm", **base}
     if "take off" in lowered or "takeoff" in lowered or "launch" in lowered:
         return {"command": "takeoff", **base}
@@ -230,8 +304,10 @@ def command_from_intent(user_intent: str, drone_state: str) -> dict[str, object]
         return {"command": "disarm", **base}
     if "arm" in lowered:
         return {"command": "arm", **base}
-    if any(token in lowered for token in ("move", "forward", "backward", "left", "right")):
-        velocity_x = -0.5 if "backward" in lowered else 0.5
+    if any(token in lowered for token in MOVE_INTENT_PHRASES):
+        velocity_x = movement_speed_from_text(lowered)
+        if "backward" in lowered:
+            velocity_x = -velocity_x
         velocity_y = -0.5 if "left" in lowered else 0.5 if "right" in lowered else 0.0
         return {
             "command": "move_velocity",
@@ -242,6 +318,21 @@ def command_from_intent(user_intent: str, drone_state: str) -> dict[str, object]
             "yaw_deg": 0.0,
         }
     return {"command": "hold", **base}
+
+
+def has_any_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    return any(has_word(text, phrase) for phrase in phrases)
+
+
+def has_word(text: str, phrase: str) -> bool:
+    escaped = re.escape(phrase).replace("\\ ", r"\s+")
+    return re.search(rf"(?<![a-z0-9_]){escaped}(?![a-z0-9_])", text) is not None
+
+
+def movement_speed_from_text(text: str) -> float:
+    if has_any_phrase(text, ("one meter per second", "1 meter per second", "1 m/s", "one metre per second")):
+        return 1.0
+    return 0.5
 
 
 def clamp_float(value, minimum: float, maximum: float) -> float:  # noqa: ANN001
