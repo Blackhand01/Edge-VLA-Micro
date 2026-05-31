@@ -6,7 +6,7 @@ Voice -> VLM -> Safety Layer -> PX4
 
 Built for edge robotics under an 8GB memory budget.
 
-[Demo Video](docs/imgs/vla-demo.mov) | [Latency Profiler](docs/index.html) | [Architecture](ARCHITECTURE.md) | [Commands](COMMANDS.md)
+[Demo Video](docs/imgs/vla-demo.mov)
 
 ![Edge-VLA Action Demo](docs/imgs/action_demo.gif)
 
@@ -14,7 +14,7 @@ Built for edge robotics under an 8GB memory budget.
 
 Most Vision-Language-Action systems require cloud inference or workstation-class GPUs. Edge-VLA-Micro demonstrates that a complete Voice-to-Action robotics pipeline can run on a Jetson Orin Nano while maintaining deterministic safety boundaries and PX4 integration.
 
-![Jetson Orin Nano Developer Kit](docs/imgs/jetson-orin-nano.jpeg)
+![Jetson Orin Nano](docs/imgs/jetson-orin-nano.jpeg)
 
 ## Key Results
 
@@ -68,6 +68,16 @@ The project includes an interactive technical profiler for comparing autonomy pi
 
 The default profiler view contrasts a naive configuration against the optimized Edge-VLA path. It models ASR cost, image capture resolution, VLM parameter count, quantization, output token budget, Jetson memory bandwidth, TTFT, decode time, and safety overhead.
 
+## Profile Comparison
+
+| Mac-only latency breakdown | Mac-only VLM throughput |
+| --- | --- |
+| ![Mac-only average control-loop latency breakdown](docs/imgs/latency_pie_chart.png) | ![Mac-only VLM decode throughput per inference run](docs/imgs/tps_bar_chart.png) |
+
+| Mac + Jetson latency breakdown | Mac + Jetson SmolVLM throughput |
+| --- | --- |
+| ![Mac + Jetson control-loop latency breakdown](docs/imgs/edge_latency_pie_chart.png) | ![Jetson SmolVLM throughput per visual inference](docs/imgs/edge_tps_bar_chart.png) |
+
 ## Demo Evidence
 
 Latest clean measured distributed run:
@@ -80,10 +90,6 @@ Latest clean measured distributed run:
 | `Move toward the red object.` | visual `move_velocity` | 11.81 s |
 | `Move 1 meter per second.` | `move_velocity` fast path | 3.4 ms |
 
-![Mac + Jetson latency breakdown](docs/imgs/edge_latency_pie_chart.png)
-
-![Jetson SmolVLM visual throughput](docs/imgs/edge_tps_bar_chart.png)
-
 ![Red target debug overlay](docs/imgs/red_object_detected.png)
 
 ## Operations
@@ -94,4 +100,3 @@ All setup, demo, SITL, Jetson, monitoring, and reporting commands are centralize
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): system design, deployment profiles, data flow, model selection rationale, telemetry interpretation.
 - [DEVELOPER_JOURNAL.md](DEVELOPER_JOURNAL.md): Jetson hardware setup, flashing guide, and chronological engineering problem log.
-- [COMMANDS.md](COMMANDS.md): centralized operational runbook for live demos, SITL routing, monitoring, and supported commands.
