@@ -1,48 +1,44 @@
-# Demo Commands
+# Commands
 
-Operational runbook for running Edge-VLA-Micro in two modes:
+## Setup
 
-1. **Mac + Jetson distributed edge**: Mac as smart sensor node, Jetson as VLA/control brain.
-2. **Mac-only local prototype**: full stack on the Mac for quick tests and functional regression.
+```bash
+make setup-mac
+```
 
-Reference video:
+```bash
+make setup-jetson
+```
 
-| Mode | Video |
-| --- | --- |
-| Mac-only local prototype | [Open `vla-demo.mov`](docs/imgs/vla-demo.mov) |
+```bash
+make test
+```
 
-![QGroundControl demo](docs/imgs/qgroundcontrol.png)
-
----
-
-## Mode 1: Mac + Jetson
-
-This is the primary deployment mode: ASR and camera capture run on the Mac, while SmolVLM, MAVSDK, and validation run on the Jetson.
-
-### 0. Mac: Sync the Jetson
+## Sync Mac To Jetson
 
 ```bash
 cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
 source .venv/bin/activate
 
-./scripts/sync_jetson_demo_files.sh
+make sync-jetson
 ```
-
-Verify that the updated Makefile reached the Jetson:
 
 ```bash
 ssh ste@192.168.55.1 'cd ~/Edge-VLA-Micro && make help'
 ```
 
-For a clean demo, archive previous runtime data before starting:
+## Reset Demo Data
 
 ```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
 RESET_REMOTE=1 make reset-demo-logs
 ```
 
-### 1. Mac: Start PX4 jMAVSim
+## Distributed Edge Demo
 
-Mac terminal 1:
+### Terminal 1: Mac PX4 SITL
 
 ```bash
 cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
@@ -51,16 +47,12 @@ source .venv/bin/activate
 make run-sitl
 ```
 
-In the PX4 `pxh>` prompt:
-
 ```bash
 mavlink stop -u 14580
 mavlink start -x -u 14580 -r 4000000 -m onboard -o 14540 -t 192.168.55.1
 ```
 
-### 2. Mac: Start QGroundControl
-
-Mac terminal 2:
+### Terminal 2: Mac QGroundControl
 
 ```bash
 cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
@@ -69,11 +61,7 @@ source .venv/bin/activate
 make run-qgc
 ```
 
-Wait until QGroundControl detects the SITL vehicle.
-
-### 3. Jetson: Verify MAVSDK heartbeat
-
-Jetson terminal:
+### Terminal 3: Jetson MAVSDK Heartbeat Check
 
 ```bash
 cd ~/Edge-VLA-Micro
@@ -85,16 +73,7 @@ python -m src.tools.heartbeat_monitor \
   --timeout 30
 ```
 
-Expected output:
-
-```text
-Heartbeat received from PX4/MAVLink system.
-Connected to drone.
-```
-
-### 4. Jetson: Start hardware monitoring
-
-Jetson terminal 2:
+### Terminal 4: Jetson Monitoring
 
 ```bash
 cd ~/Edge-VLA-Micro
@@ -103,15 +82,7 @@ source .venv-jetson/bin/activate
 make monitor-jetson
 ```
 
-Leave the terminal open during the demo. The monitor records Jetson hardware telemetry for chart generation.
-
-The monitor can generate charts such as:
-
-![Jetson memory chart](docs/imgs/jetson_memory_timeseries.png)
-
-### 5. Jetson: Start the VLA brain/server
-
-Jetson terminal 3:
+### Terminal 5: Jetson VLA Brain
 
 ```bash
 cd ~/Edge-VLA-Micro
@@ -119,8 +90,6 @@ source .venv-jetson/bin/activate
 
 make run-edge-brain
 ```
-
-Equivalent fallback if `make` is unavailable:
 
 ```bash
 cd ~/Edge-VLA-Micro
@@ -132,30 +101,30 @@ PORT=8000 \
 ./scripts/run_jetson_cognition_server.sh
 ```
 
-### 6. Mac: Start the voice/camera sensor node
-
-Mac terminal 3:
+### Terminal 6: Mac Smart Sensor
 
 ```bash
 cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
+source /tmp/edge-vla-demo-venv/bin/activate
 
 make run-edge-sensor
 ```
 
-The target uses these defaults:
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source /tmp/edge-vla-demo-venv/bin/activate
 
-```text
-ASR_BACKEND=mlx-whisper
-WHISPER_MODEL=mlx-community/whisper-small.en-mlx
-WHISPER_LANGUAGE=en
-RECORD_SECONDS=5
-ASR_TIMEOUT=180
-CAMERA_INDEX=1
-IMAGE_MODE=auto
+SERVER_URL=http://192.168.55.1:8000/process_intent \
+CAMERA_INDEX=1 \
+ASR_BACKEND=mlx-whisper \
+WHISPER_MODEL=mlx-community/whisper-small.en-mlx \
+WHISPER_LANGUAGE=en \
+RECORD_SECONDS=5 \
+ASR_TIMEOUT=180 \
+IMAGE_MODE=auto \
+TELEMETRY_LOG=logs/telemetry.csv \
+./scripts/run_drone_voice_demo_mac.sh
 ```
-
-More explicit fallback:
 
 ```bash
 python -m src.tools.drone_voice_app \
@@ -170,123 +139,7 @@ python -m src.tools.drone_voice_app \
   --timeout 180
 ```
 
-### 7. Demo commands
-
-```text
-Arm the drone.
-Take off.
-Move toward the red object.
-Move one meter per second.
-Move left.
-Hold position.
-Land.
-```
-
-### 8. Visual debugging
-
-After a visual command:
-
-```bash
-open tmp/mac_sensor_frame.jpg
-open tmp/last_detection_debug.jpg
-```
-
-Example saved overlay:
-
-![Red target debug overlay](docs/imgs/red_object_detected.png)
-
-### 9. End of demo: Pull telemetry and generate charts
-
-Stop the Jetson server and monitor with `Ctrl+C`, then run on the Mac:
-
-```bash
-cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
-
-make pull-jetson-logs
-make charts-jetson
-```
-
-Expected output: updated charts under `docs/imgs/`.
-
-Latest clean measured demo:
-
-| Command | Result | Server latency |
-| --- | --- | ---: |
-| `Arm the drone.` | `arm` accepted | 1.05 s |
-| `Take off!` | `takeoff` accepted | 1.72 s |
-| `Move toward the red object.` | visual `move_velocity` | 17.52 s |
-| `Move toward the red object.` | visual `move_velocity` | 11.81 s |
-| `Move 1 meter per second.` | `move_velocity` fast path | 3.4 ms |
-
-![Jetson compute and thermal chart](docs/imgs/jetson_compute_thermal_timeseries.png)
-
----
-
-## Mode 2: Mac-only
-
-This mode runs ASR, camera capture, VLM inference, validation, and MAVSDK control on the Mac. Use it for fast tests without the Jetson.
-
-### 1. Mac: Start PX4 jMAVSim
-
-Mac terminal 1:
-
-```bash
-cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
-
-make run-sitl
-```
-
-### 2. Mac: Start QGroundControl
-
-Mac terminal 2:
-
-```bash
-cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
-
-make run-qgc
-```
-
-### 3. Mac: Start the local pipeline
-
-Mac terminal 3:
-
-```bash
-cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
-
-make run-local
-```
-
-Equivalent fallback:
-
-```bash
-./scripts/run_all_mac_agent.sh
-```
-
-### 4. Mac-only performance charts
-
-After a local session:
-
-```bash
-cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
-source .venv/bin/activate
-
-make charts-local
-```
-
-Primary outputs:
-
-```text
-docs/imgs/latency_pie_chart.png
-docs/imgs/tps_bar_chart.png
-```
-
----
-
-## Supported Commands
+## Voice Commands
 
 ```text
 Arm the drone.
@@ -309,10 +162,77 @@ Hover.
 Stay.
 ```
 
-## Primary Documents
+## Visual Debugging
 
-```text
-README.md
-ARCHITECTURE.md
-DEVELOPER_JOURNAL.md
+```bash
+open tmp/mac_sensor_frame.jpg
+open tmp/last_detection_debug.jpg
+```
+
+## Pull Jetson Logs And Generate Charts
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source /tmp/edge-vla-demo-venv/bin/activate
+
+make pull-jetson-logs
+make charts-jetson
+```
+
+## Mac-Only Demo
+
+### Terminal 1: Mac PX4 SITL
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+make run-sitl
+```
+
+### Terminal 2: Mac QGroundControl
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+make run-qgc
+```
+
+### Terminal 3: Mac Local Pipeline
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+make run-local
+```
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+COGNITION_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit make run-local
+```
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+./scripts/run_all_mac_agent.sh
+```
+
+## Mac-Only Charts
+
+```bash
+cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
+source .venv/bin/activate
+
+make charts-local
+```
+
+## Latency Profiler
+
+```bash
+open docs/index.html
 ```
