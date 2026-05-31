@@ -90,8 +90,6 @@ Latest clean measured distributed run:
 | `Move toward the red object.` | visual `move_velocity` | 11.81 s |
 | `Move 1 meter per second.` | `move_velocity` fast path | 3.4 ms |
 
-![Red target debug overlay](docs/imgs/red_object_detected.png)
-
 ## Operations
 
 All setup, demo, SITL, Jetson, monitoring, and reporting commands are centralized in [COMMANDS.md](COMMANDS.md).
