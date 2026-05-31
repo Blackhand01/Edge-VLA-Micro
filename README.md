@@ -6,13 +6,15 @@ Voice -> VLM -> Safety Layer -> PX4
 
 Built for edge robotics under an 8GB memory budget.
 
-[Demo Video](docs/imgs/vla-demo.mov) | [Architecture](ARCHITECTURE.md) | [Developer Journal](DEVELOPER_JOURNAL.md)
+[Demo Video](docs/imgs/vla-demo.mov) | [Latency Profiler](docs/index.html) | [Architecture](ARCHITECTURE.md) | [Commands](commands.md)
 
 ![Edge-VLA Action Demo](docs/imgs/action_demo.gif)
 
 ## Why it matters
 
 Most Vision-Language-Action systems require cloud inference or workstation-class GPUs. Edge-VLA-Micro demonstrates that a complete Voice-to-Action robotics pipeline can run on a Jetson Orin Nano while maintaining deterministic safety boundaries and PX4 integration.
+
+![Jetson Orin Nano Developer Kit](docs/imgs/jetson-orin-nano.jpeg)
 
 ## Key Results
 
@@ -22,15 +24,22 @@ Most Vision-Language-Action systems require cloud inference or workstation-class
 | VLM | SmolVLM-256M |
 | Peak RAM | 3.5 GB |
 | Swap | 0 MB |
+| GPU visual-inference peak | 99% |
+| Peak temperature | 50.66 C |
+| Thermal throttling | 0 suspected samples |
 | Voice-to-Action | demonstrated |
 | PX4 Integration | MAVSDK |
 | Safety Layer | Pydantic + CV + State Machine |
+
+![Jetson memory telemetry](docs/imgs/jetson_memory_timeseries.png)
+
+![Jetson compute and thermal telemetry](docs/imgs/jetson_compute_thermal_timeseries.png)
 
 ## The Core Rule
 
 The VLM is not a control authority. Perception proposes intent -> Safety authorizes -> Control executes.
 
-## Technical Profile
+## Optimization Strategy
 
 Edge-VLA-Micro has two runtime profiles:
 
@@ -41,80 +50,44 @@ Edge-VLA-Micro has two runtime profiles:
 
 The Mac profile can run larger Qwen2-VL MLX models for local spatial-reasoning validation. The Jetson profile runs SmolVLM to stay within the Orin Nano 8GB Unified Memory Architecture budget while preserving PX4/MAVLink control integration.
 
-## Prerequisites
-
-- Apple Silicon Mac for ASR, camera capture, PX4 SITL, QGroundControl, and local MLX tests.
-- NVIDIA Jetson Orin Nano 8GB with JetPack 6.x and CUDA-capable NVIDIA PyTorch.
-- PX4 SITL with jMAVSim and QGroundControl available from this repository.
-- USB-C or routed local network between Mac and Jetson. The default Jetson USB device-mode address is `192.168.55.1`.
-
-## Quickstart
-
-Install dependencies:
-
-```bash
-make setup-mac
-make setup-jetson
-```
-
-Run the Mac-only profile:
-
-```bash
-make run-sitl
-make run-qgc
-make run-local
-```
-
-Run the Mac-only profile with explicit Qwen2-VL MLX:
-
-```bash
-COGNITION_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit make run-local
-```
-
-Run the distributed edge profile:
-
-| Terminal | Device | Command |
+| Design choice | Naive baseline | Edge-VLA optimized path |
 | --- | --- | --- |
-| 1 | Mac | `make run-sitl` |
-| 2 | Mac | `make run-qgc` |
-| 3 | Jetson | `make monitor-jetson` |
-| 4 | Jetson | `make run-edge-brain` |
-| 5 | Mac | `make run-edge-sensor` |
+| VLM size | Qwen2-VL 2B-class | SmolVLM 256M |
+| Precision | FP16 | 4-bit / constrained edge runtime |
+| Vision input | Full-resolution frame | cropped/downsampled frame |
+| Runtime target | workstation-class GPU | Jetson Orin Nano 8GB |
+| Safety | model-driven intent only | model proposal plus deterministic validation |
 
-In the PX4 `pxh>` shell, route onboard MAVLink traffic to the Jetson:
+## Latency Profiler
 
-```bash
-mavlink stop -u 14580
-mavlink start -x -u 14580 -r 4000000 -m onboard -o 14540 -t 192.168.55.1
-```
+The project includes an interactive technical profiler for comparing autonomy pipeline configurations:
 
-## Supported Commands
+[Open the Edge-VLA Autonomy Latency Profiler](docs/index.html)
 
-```text
-Arm the drone.
-Take off.
-Move toward the red object.
-Move one meter per second.
-Move left.
-Move right.
-Hold position.
-Land.
-```
+![Latency profiler](docs/imgs/LatencyProfiler.png)
+
+The default profiler view contrasts a naive configuration against the optimized Edge-VLA path. It models ASR cost, image capture resolution, VLM parameter count, quantization, output token budget, Jetson memory bandwidth, TTFT, decode time, and safety overhead.
+
+## Demo Evidence
+
+Latest clean measured distributed run:
+
+| Command | Result | Server latency |
+| --- | --- | ---: |
+| `Arm the drone.` | `arm` accepted | 1.05 s |
+| `Take off!` | `takeoff` accepted | 1.72 s |
+| `Move toward the red object.` | visual `move_velocity` | 17.52 s |
+| `Move toward the red object.` | visual `move_velocity` | 11.81 s |
+| `Move 1 meter per second.` | `move_velocity` fast path | 3.4 ms |
+
+![Red target debug overlay](docs/imgs/red_object_detected.png)
+
+## Operations
+
+All setup, demo, SITL, Jetson, monitoring, and reporting commands are centralized in [commands.md](commands.md).
 
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): system design, deployment profiles, data flow, model selection rationale, telemetry interpretation.
 - [DEVELOPER_JOURNAL.md](DEVELOPER_JOURNAL.md): Jetson hardware setup, flashing guide, and chronological engineering problem log.
-- [commands.md](commands.md): operational runbook for live demos, SITL routing, monitoring, and supported commands.
-
-## Reporting
-
-Generate charts after a run:
-
-```bash
-make pull-jetson-logs
-make charts-jetson
-make charts-local
-```
-
-The generated visual reports are written under `docs/imgs/` and are discussed in [ARCHITECTURE.md](ARCHITECTURE.md).
+- [commands.md](commands.md): centralized operational runbook for live demos, SITL routing, monitoring, and supported commands.
