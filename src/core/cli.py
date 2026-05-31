@@ -12,7 +12,7 @@ from src.safety.command_validator import CommandValidator, DroneOperationalState
 from src.action import DEFAULT_CONNECTION, DroneController
 from src.audio import AudioModule, DEFAULT_WHISPER_LANGUAGE
 from src.core.agent_loop import AgentLoop
-from src.monitoring import BlackboxLogger, PerformanceLogger
+from src.monitoring import BlackboxLogger, PerformanceLogger, TelemetryCsvLogger
 from src.perception import CognitionEngine, DEFAULT_MODEL_ID
 from src.perception.cognition_service import AsyncCognitionService, ProcessCognitionService, ThreadedCognitionService
 from src.perception.vision_module import VisionModule
@@ -41,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-cognition-failures", default=3, type=int, help="Consecutive cognition failures before emergency hold.")
     parser.add_argument("--blackbox-dir", default="logs/sessions", help="Directory for blackbox telemetry bundles.")
     parser.add_argument("--performance-log", default="logs/performance.csv", help="CSV path for per-inference latency metrics.")
+    parser.add_argument("--telemetry-log", default="logs/telemetry.csv", help="Unified CSV path for runtime telemetry events.")
     return parser
 
 
@@ -66,6 +67,7 @@ async def run_agent(args: argparse.Namespace) -> None:
         ),
         blackbox_logger=BlackboxLogger(sessions_dir=args.blackbox_dir),
         performance_logger=PerformanceLogger(path=args.performance_log),
+        telemetry_logger=TelemetryCsvLogger(path=args.telemetry_log),
         cognition_service=cognition_service,
         max_cognition_failures=args.max_cognition_failures,
     )

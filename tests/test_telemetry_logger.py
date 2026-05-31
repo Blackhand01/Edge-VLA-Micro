@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from src.monitoring import BlackboxLogger, PerformanceLogger
+from src.monitoring import BlackboxLogger, PerformanceLogger, TelemetryCsvLogger
 
 
 class _FakeCv2:
@@ -102,6 +102,31 @@ class BlackboxLoggerTests(unittest.IsolatedAsyncioTestCase):
             rows = csv_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(rows[0], "timestamp,audio_ms,vision_ms,ttft_ms,decode_time_ms,tps,safety_ms,total_latency_ms")
             self.assertIn("10.000,20.000,30.000,40.000,12.500000,5.000,120.000", rows[1])
+
+    async def test_unified_telemetry_logger_appends_csv_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "logs" / "telemetry.csv"
+            logger = TelemetryCsvLogger(path=csv_path)
+
+            logger.log_event(
+                profile="edge_distributed",
+                component="mac_sensor_client",
+                request_id="abc",
+                ok=True,
+                action="hold",
+                command="hold",
+                state="AIRBORNE",
+                input_text="Hold position.",
+                image_present=False,
+                audio_ms=10.0,
+                http_ms=20.0,
+                total_ms=30.0,
+            )
+
+            rows = csv_path.read_text(encoding="utf-8").splitlines()
+            self.assertIn("timestamp_utc,profile,component,request_id", rows[0])
+            self.assertIn("edge_distributed,mac_sensor_client,abc", rows[1])
+            self.assertIn("10.000", rows[1])
 
 
 if __name__ == "__main__":

@@ -14,15 +14,26 @@ This document consolidates the hardware setup guide and the chronological softwa
 
 ![Jetson Orin Nano Developer Kit](docs/imgs/jetson-orin-nano.jpeg)
 
-![Il PC Ubuntu assemblato per l'occasione](docs/imgs/mac-pc_assembled-jetson.jpg)
+![Temporary Ubuntu host assembled for Jetson flashing](docs/imgs/mac-pc_assembled-jetson.jpg)
 
-![Mappa Hardware del Jetson Orin Nano e Slot M.2 Inferiore](docs/imgs/jetson-orin-nano-memory-map.png)
+![Jetson Orin Nano hardware map and lower M.2 slot](docs/imgs/jetson-orin-nano-memory-map.png)
+
+![NVMe storage used for Jetson runtime](docs/imgs/NVMe.jpeg)
 
 ### Why a Temporary Linux Host Is Required
 
 NVIDIA SDK Manager is not compatible with macOS. Flashing JetPack and the bootloader requires a native Linux host with reliable USB passthrough. Virtual machines and WSL are not recommended for this step because USB recovery-mode enumeration and low-level flashing can fail.
 
 The temporary Ubuntu host is only needed for flashing. After JetPack is installed on the Jetson NVMe drive, normal development happens from the Mac over SSH.
+
+The development split after flashing is:
+
+| Device | Responsibility |
+| --- | --- |
+| Mac | source editing, voice/camera sensor node, PX4 SITL, QGroundControl |
+| Jetson | CUDA VLM runtime, FastAPI bridge, MAVSDK command execution, hardware telemetry |
+
+![Current Mac/Jetson pipeline](docs/imgs/jetson-current-pipeline.svg)
 
 ### Connection Diagram
 
@@ -37,8 +48,8 @@ The temporary Ubuntu host is only needed for flashing. After JetPack is installe
 |    (Client)     |             |    (Target)     |
 +--------+--------+             +--------+-------+|
          |                               |
-         +--- Cavo USB-C (Ad alta vel.) -+
-Interfaccia Linux for Tegra
+         +--- High-speed USB-C data cable --+
+Linux for Tegra interface
 (IP: 192.168.55.100 <-> 192.168.55.1)
 ```
 
@@ -64,7 +75,7 @@ Original setup link preserved: [NVIDIA Developer SDK Manager](https://www.google
 On the Ubuntu host:
 
 ```bash
-cd ~/Scaricati
+cd ~/Downloads
 sudo apt install ./sdkmanager_*_amd64.deb
 sdkmanager
 ```
@@ -90,13 +101,13 @@ Sequence:
 5. Remove the short.
 
 ```text
-   Mappa concettuale dei Pin (Button Header):
+   Conceptual Button Header pin map:
    +-----------------------------------------+
-   |  o   o   o   o   o   o   o   [o]  [o]  o |  <- Fila superiore pin
+   |  o   o   o   o   o   o   o   [o]  [o]  o |  <- upper pin row
    |  1   2   3   4   5   6   7    9    10  11|
    |                              |    |     |
    |                              +----+-----+
-   |                                Corto (FCM)
+   |                                Short (FCM)
    +-----------------------------------------+
 ```
 
@@ -117,7 +128,7 @@ Bus XXX Device YYY: ID 0955:7035 NVIDIA Corp.
 After flashing, complete Ubuntu first boot on the Jetson and connect Wi-Fi with `nmcli`:
 
 ```bash
-sudo nmcli device wifi connect "<SSID_WIFI>" password "<PASSWORD_WIFI>"
+sudo nmcli device wifi connect "<WIFI_SSID>" password "<WIFI_PASSWORD>"
 hostname -I
 ```
 
@@ -131,21 +142,21 @@ Expected addresses:
 Test SSH:
 
 ```bash
-ssh <UTENTE_JETSON>@192.168.55.1
+ssh <JETSON_USER>@192.168.55.1
 ```
 
 Recommended `~/.ssh/config` entries on the Mac:
 
 ```text
-# Jetson Orin Nano - Connessione Diretta via Cavo USB-C
+# Jetson Orin Nano - Direct USB-C connection
 Host jetson-usb
     HostName 192.168.55.1
-    User <UTENTE_JETSON>
+    User <JETSON_USER>
 
-# Jetson Orin Nano - Connessione via Rete Wi-Fi Locale
+# Jetson Orin Nano - Local Wi-Fi network connection
 Host jetson-wifi
     HostName 192.168.1.xxx
-    User <UTENTE_JETSON>
+    User <JETSON_USER>
 ```
 
 If VS Code Remote SSH shows a local-network route error, enable Visual Studio Code under macOS:
@@ -167,8 +178,6 @@ Cuda compilation tools, release 12.6
 ```
 
 ## Section 2: Software Problem Log
-
-![Pipeline corrente Mac/Jetson](docs/imgs/jetson-current-pipeline.svg)
 
 ### 1. Jetson Network Failure: No NAT from USB
 
@@ -198,7 +207,7 @@ Resolution:
 ```bash
 nmcli device wifi rescan
 nmcli device wifi list
-sudo nmcli device wifi connect "<SSID_WIFI>" password "<PASSWORD_WIFI>"
+sudo nmcli device wifi connect "<WIFI_SSID>" password "<WIFI_PASSWORD>"
 sudo apt update
 sudo apt install -y python3.10-venv python3-pip
 ```
@@ -310,6 +319,8 @@ CUDACachingAllocator.cpp:838
 
 Conclusion: Qwen2-VL-2B FP16 exceeds the practical 8GB UMA budget once the OS, Python runtime, CUDA context, model, image processing, and control services are considered.
 
+![Jetson UMA/runtime decision](docs/imgs/vlm-runtime-decision.svg)
+
 Engineering decision:
 
 ```text
@@ -377,3 +388,23 @@ peak_cuda_allocated_gb: 0.60
 ```
 
 Decision: SmolVLM-256M is the first real VLM baseline for Jetson. It runs single-device CUDA without offload and leaves memory headroom for the OS, OpenCV, FastAPI, MAVSDK, and telemetry.
+
+### 7. Distributed Demo Telemetry Accepted
+
+A clean distributed demo run was recorded after archiving previous logs. The run produced:
+
+| Evidence | Result |
+| --- | --- |
+| Accepted commands | 5 |
+| Jetson monitor samples | 176 |
+| Peak RAM | 3513 MB / 7607 MB |
+| Peak GPU | 99% |
+| Peak temperature | 50.656 C |
+| Swap usage | 0 MB |
+| Thermal throttling suspicion | 0 samples |
+
+![Jetson memory profile during clean demo](docs/imgs/jetson_memory_timeseries.png)
+
+![Jetson compute and thermal profile during clean demo](docs/imgs/jetson_compute_thermal_timeseries.png)
+
+The hardware result is stable: the observed bottleneck is VLM/ASR latency, not thermal throttling or memory exhaustion.

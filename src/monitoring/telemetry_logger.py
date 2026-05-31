@@ -22,6 +22,33 @@ PERFORMANCE_COLUMNS = (
     "total_latency_ms",
 )
 
+TELEMETRY_COLUMNS = (
+    "timestamp_utc",
+    "profile",
+    "component",
+    "request_id",
+    "source",
+    "ok",
+    "action",
+    "command",
+    "state",
+    "input_text",
+    "image_present",
+    "audio_ms",
+    "vision_ms",
+    "http_ms",
+    "cognition_ms",
+    "action_ms",
+    "total_ms",
+    "ttft_ms",
+    "decode_time_ms",
+    "generated_tokens",
+    "tps",
+    "safety_ms",
+    "reason",
+    "details",
+)
+
 _FALLBACK_JPEG = bytes(
     [
         0xFF,
@@ -259,3 +286,38 @@ class PerformanceLogger:
             if write_header:
                 writer.writeheader()
             writer.writerow(row)
+
+
+class TelemetryCsvLogger:
+    def __init__(self, *, path: str | Path = "logs/telemetry.csv") -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log_event(self, **fields: Any) -> None:
+        row = {column: "" for column in TELEMETRY_COLUMNS}
+        row["timestamp_utc"] = datetime.now(timezone.utc).isoformat()
+        for key, value in fields.items():
+            if key not in row:
+                continue
+            row[key] = self._format_value(value)
+        self._append_row(row)
+
+    def _append_row(self, row: dict[str, str]) -> None:
+        write_header = not self.path.exists() or self.path.stat().st_size == 0
+        with self.path.open("a", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=TELEMETRY_COLUMNS)
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
+
+    @staticmethod
+    def _format_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, float):
+            return f"{value:.3f}"
+        if isinstance(value, (dict, list, tuple)):
+            return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+        return str(value)

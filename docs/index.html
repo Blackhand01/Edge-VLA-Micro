@@ -391,17 +391,17 @@
               <div class="field">
                 <label for="whisper-model-a">Whisper model</label>
                 <select id="whisper-model-a" data-field="whisperModel">
-                  <option value="tiny" selected>Tiny</option>
+                  <option value="tiny">Tiny</option>
                   <option value="base">Base</option>
-                  <option value="small">Small</option>
+                  <option value="small" selected>Small</option>
                   <option value="large">Large</option>
                 </select>
               </div>
               <div class="field">
                 <label for="audio-engine-a">ASR engine</label>
                 <select id="audio-engine-a" data-field="audioEngine">
-                  <option value="standard">Standard PyTorch</option>
-                  <option value="optimized" selected>faster-whisper CTranslate2</option>
+                  <option value="standard" selected>Standard PyTorch</option>
+                  <option value="optimized">faster-whisper CTranslate2</option>
                 </select>
               </div>
               <div class="field">
@@ -418,9 +418,9 @@
               <div class="field">
                 <label for="resolution-a">Capture resolution</label>
                 <select id="resolution-a" data-field="resolution">
-                  <option value="1920x1080">1920x1080 Full HD</option>
+                  <option value="1920x1080" selected>1920x1080 Full HD</option>
                   <option value="448x448">448x448 Medium</option>
-                  <option value="224x224" selected>224x224 Aggressive crop</option>
+                  <option value="224x224">224x224 Aggressive crop</option>
                 </select>
               </div>
             </div>
@@ -432,14 +432,14 @@
                   Model parameters
                   <span class="value" id="vlm-params-label-a">2.0B</span>
                 </label>
-                <input id="vlm-params-a" data-field="vlmParams" type="range" min="0.5" max="8" step="0.1" value="2">
+                <input id="vlm-params-a" data-field="vlmParams" type="range" min="0.2" max="8" step="0.05" value="2">
               </div>
               <div class="field">
                 <label for="precision-a">Quantization</label>
                 <select id="precision-a" data-field="precision">
-                  <option value="fp16">FP16</option>
+                  <option value="fp16" selected>FP16</option>
                   <option value="int8">INT8</option>
-                  <option value="int4" selected>INT4</option>
+                  <option value="int4">INT4</option>
                 </select>
               </div>
               <div class="field">
@@ -531,9 +531,9 @@
               <div class="field">
                 <label for="vlm-params-b">
                   Model parameters
-                  <span class="value" id="vlm-params-label-b">2.0B</span>
+                  <span class="value" id="vlm-params-label-b">0.25B</span>
                 </label>
-                <input id="vlm-params-b" data-field="vlmParams" type="range" min="0.5" max="8" step="0.1" value="2">
+                <input id="vlm-params-b" data-field="vlmParams" type="range" min="0.2" max="8" step="0.05" value="0.25">
               </div>
               <div class="field">
                 <label for="precision-b">Quantization</label>
@@ -546,9 +546,9 @@
               <div class="field">
                 <label for="tokens-b">
                   Output tokens
-                  <span class="value" id="tokens-label-b">80</span>
+                  <span class="value" id="tokens-label-b">16</span>
                 </label>
-                <input id="tokens-b" data-field="tokens" type="range" min="1" max="150" step="1" value="80">
+                <input id="tokens-b" data-field="tokens" type="range" min="1" max="150" step="1" value="16">
               </div>
             </div>
           </section>
@@ -589,7 +589,7 @@
 
   <script>
     const SAFETY_MS = 36.9;
-    const MEMORY_BANDWIDTH_GBPS = 100;
+    const MEMORY_BANDWIDTH_GBPS = 68;
 
     const WHISPER_PARAMS_B = {
       tiny: 0.039,
@@ -686,7 +686,7 @@
     function renderSide(side, data) {
       const controls = state[side];
       controls.audioDurationLabel.textContent = `${data.duration.toFixed(1)} s`;
-      controls.vlmParamsLabel.textContent = `${data.vlmParams.toFixed(1)}B`;
+      controls.vlmParamsLabel.textContent = `${formatParams(data.vlmParams)}B`;
       controls.tokensLabel.textContent = `${data.tokens}`;
       controls.total.textContent = (data.total / 1000).toFixed(2);
       controls.rate.textContent = `${data.rateHz.toFixed(2)} Hz control rate`;
@@ -720,6 +720,13 @@
       winnerLabel.textContent = `Configuration ${winner}`;
       resolutionText.textContent =
         `Configuration ${winner} reduces latency by ${Math.round(reduction)}% and enables a ${winnerData.rateHz.toFixed(2)} Hz control rate.`;
+    }
+
+    function formatParams(value) {
+      if (value < 1) {
+        return value.toFixed(2);
+      }
+      return value.toFixed(1);
     }
 
     function update() {

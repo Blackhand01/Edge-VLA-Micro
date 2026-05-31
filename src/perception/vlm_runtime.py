@@ -5,7 +5,7 @@ import time
 from typing import Any, Optional
 
 from src.perception.models import GeneratorFn, VLMProfile, estimate_generated_token_count
-from src.perception.prompts import DEFAULT_MODEL_ID, DEFAULT_QUANTIZED_MODEL_ID
+from src.perception.prompts import DEFAULT_BASE_MODEL_ID, DEFAULT_MODEL_ID, DEFAULT_QUANTIZED_MODEL_ID
 
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,8 @@ class VLMRuntime:
         except Exception as exc:
             raise RuntimeError(
                 "Unable to import the MLX-VLM runtime. Reinstall the pinned dependencies with "
-                "`python -m pip install -r requirements.txt`. "
+                "`python -m pip install -r requirements.txt`. This legacy MLX-VLM runtime is not used "
+                "by the current Mac-to-Jetson demo path. "
                 f"Original import error: {type(exc).__name__}: {exc}"
             ) from exc
         try:
@@ -209,6 +210,10 @@ class VLMRuntime:
 
 
 def resolve_model_id(model_id: str, prefer_quantized: bool, quantized_model_id: str) -> str:
+    normalized = resolve_qwen_mlx_alias(model_id, prefer_quantized, quantized_model_id)
+    if normalized != model_id:
+        logger.info("Resolved Qwen MLX model alias: %s -> %s", model_id, normalized)
+        return normalized
     if not prefer_quantized:
         return model_id
     lowered = model_id.lower()
@@ -216,6 +221,24 @@ def resolve_model_id(model_id: str, prefer_quantized: bool, quantized_model_id: 
         return model_id
     logger.info("Using 4-bit MLX-VLM model variant: %s -> %s", model_id, quantized_model_id)
     return quantized_model_id
+
+
+def resolve_qwen_mlx_alias(model_id: str, prefer_quantized: bool, quantized_model_id: str) -> str:
+    alias = model_id.strip()
+    lowered = alias.lower()
+    qwen_aliases = {
+        "qwen",
+        "qwen2-vl",
+        "qwen2-vl-2b",
+        "qwen2-vl-2b-instruct",
+        "qwen/qwen2-vl-2b-instruct",
+        "qwen/qwen2-vl-2b",
+    }
+    if lowered not in qwen_aliases:
+        return model_id
+    if "4bit" in lowered or "4-bit" in lowered or "int4" in lowered:
+        return quantized_model_id
+    return quantized_model_id if prefer_quantized else DEFAULT_BASE_MODEL_ID
 
 
 def build_stream_profile(started, first_token_at, ended_at, raw_response, generated_tokens, final_count, prompt_eval_ms):

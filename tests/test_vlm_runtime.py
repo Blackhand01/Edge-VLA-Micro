@@ -30,6 +30,12 @@ class VLMRuntimeOptimizationTests(unittest.TestCase):
 
         self.assertEqual(runtime.model_id, "mlx-community/Qwen2-VL-2B-Instruct")
 
+    def test_qwen_huggingface_alias_routes_to_mlx_quantized_model(self) -> None:
+        self.assertEqual(
+            resolve_model_id("Qwen/Qwen2-VL-2B-Instruct", True, DEFAULT_QUANTIZED_MODEL_ID),
+            DEFAULT_QUANTIZED_MODEL_ID,
+        )
+
     def test_dummy_runtime_returns_valid_profiled_json(self) -> None:
         runtime = DummyVLMRuntime(latency_s=0.0)
 

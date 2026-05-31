@@ -8,4 +8,5 @@ PORT="${PORT:-8000}"
 python -m src.api.cognition_server \
   --host "${HOST}" \
   --port "${PORT}" \
-  --connection "${CONNECTION}"
+  --connection "${CONNECTION}" \
+  --telemetry-log "${TELEMETRY_LOG:-logs/telemetry.csv}"

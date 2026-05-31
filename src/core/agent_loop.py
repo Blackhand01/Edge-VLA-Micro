@@ -12,7 +12,7 @@ from src.audio import AudioModule, transcribe_audio
 from src.core.drone_snapshot import DroneSnapshotBuilder, kinematic_state_dict
 from src.core.intent_patterns import ACTIONABLE_PATTERN, EMERGENCY_KEYWORDS, EMERGENCY_PATTERN, VISION_REQUIRED_PATTERN
 from src.core.status import LoopStatus
-from src.monitoring import BlackboxLogger, PerformanceLogger
+from src.monitoring import BlackboxLogger, PerformanceLogger, TelemetryCsvLogger
 from src.perception import CognitionEngine, CognitionError, CognitionResult, VLMProfile
 from src.perception.cognition_service import AsyncCognitionService, ThreadedCognitionService
 from src.perception.vision_module import VisionError, VisionModule
@@ -32,6 +32,7 @@ class AgentLoop:
         vision_module: VisionModule,
         blackbox_logger: Optional[BlackboxLogger] = None,
         performance_logger: Optional[PerformanceLogger] = None,
+        telemetry_logger: Optional[TelemetryCsvLogger] = None,
         cognition_executor: Optional[ThreadPoolExecutor] = None,
         cognition_service: Optional[AsyncCognitionService] = None,
         max_cognition_failures: int = 3,
@@ -43,6 +44,7 @@ class AgentLoop:
         self.vision_module = vision_module
         self.blackbox_logger = blackbox_logger
         self.performance_logger = performance_logger
+        self.telemetry_logger = telemetry_logger
         self.cognition_service = cognition_service or ThreadedCognitionService(cognition_engine, executor=cognition_executor)
         self.max_cognition_failures = max(1, max_cognition_failures)
         self.idle_sleep_s = idle_sleep_s
@@ -204,6 +206,25 @@ class AgentLoop:
                 tps=profile.tps,
                 safety_ms=profile.safety_ms,
                 total_latency_ms=total_latency_ms,
+            )
+        if record_performance and self.telemetry_logger is not None:
+            self.telemetry_logger.log_event(
+                profile="local_mac",
+                component="agent_loop",
+                ok=not action.startswith(("HOLD:", "HOLD_UNAVAILABLE", "HOLD_SKIPPED", "IGNORED")),
+                action=action,
+                state=state,
+                input_text=compact_input,
+                image_present=context.vision_ms > 0.0,
+                audio_ms=context.audio_ms,
+                vision_ms=context.vision_ms,
+                cognition_ms=context.vlm_ms,
+                total_ms=total_latency_ms,
+                ttft_ms=profile.ttft_ms,
+                decode_time_ms=profile.decode_time_ms,
+                generated_tokens=profile.generated_tokens,
+                tps=profile.tps,
+                safety_ms=profile.safety_ms,
             )
         print(format_status_line(state, compact_input, action, context, total_latency_ms), flush=True)
         return LoopStatus(state, compact_input, action, context.audio_ms, context.vision_ms, context.vlm_ms, profile.ttft_ms, profile.decode_time_ms, profile.tps, profile.safety_ms, total_latency_ms)

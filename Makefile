@@ -11,10 +11,17 @@ CONNECTION ?= udpin://0.0.0.0:14540
 HOST ?= 0.0.0.0
 PORT ?= 8000
 CAMERA_INDEX ?= 1
+ASR_BACKEND ?= mlx-whisper
+WHISPER_MODEL ?= mlx-community/whisper-small.en-mlx
+WHISPER_LANGUAGE ?= en
+RECORD_SECONDS ?= 5
+ASR_TIMEOUT ?= 180
+IMAGE_MODE ?= auto
+COGNITION_MODEL ?= mlx-community/Qwen2-VL-2B-Instruct-4bit
 TELEMETRY_LOG ?= logs/telemetry.csv
 JETSON_MONITOR_OUTPUT ?= logs/jetson_telemetry.csv
 
-.PHONY: help setup-mac setup-jetson run-local run-edge-sensor run-edge-brain run-sitl run-qgc monitor-jetson pull-jetson-logs charts-jetson charts-local sync-jetson test
+.PHONY: help setup-mac setup-jetson run-local run-edge-sensor run-edge-brain run-sitl run-qgc monitor-jetson pull-jetson-logs charts-jetson charts-local reset-demo-logs sync-jetson test
 
 help:
 	@echo "Edge-VLA-Micro targets"
@@ -35,6 +42,7 @@ help:
 	@echo "  make pull-jetson-logs   Copy Jetson logs into local ./logs"
 	@echo "  make charts-jetson      Generate Jetson telemetry summary and charts"
 	@echo "  make charts-local       Generate local latency charts from logs/performance.csv"
+	@echo "  make reset-demo-logs    Archive local and Jetson logs before a clean demo run"
 	@echo "  make sync-jetson        Rsync demo/server files to the Jetson"
 	@echo "  make test               Run focused unit tests"
 
@@ -49,10 +57,10 @@ setup-jetson:
 	$(JETSON_PYTHON) -m pip install -r requirements-jetson.txt
 
 run-local:
-	TELEMETRY_LOG="$(TELEMETRY_LOG)" ./scripts/run_all_mac_agent.sh
+	COGNITION_MODEL="$(COGNITION_MODEL)" VLM_BACKEND="mlx" TELEMETRY_LOG="$(TELEMETRY_LOG)" ./scripts/run_all_mac_agent.sh
 
 run-edge-sensor:
-	SERVER_URL="$(SERVER_URL)" CAMERA_INDEX="$(CAMERA_INDEX)" TELEMETRY_LOG="$(TELEMETRY_LOG)" ./scripts/run_drone_voice_demo_mac.sh
+	SERVER_URL="$(SERVER_URL)" CAMERA_INDEX="$(CAMERA_INDEX)" ASR_BACKEND="$(ASR_BACKEND)" WHISPER_MODEL="$(WHISPER_MODEL)" WHISPER_LANGUAGE="$(WHISPER_LANGUAGE)" RECORD_SECONDS="$(RECORD_SECONDS)" ASR_TIMEOUT="$(ASR_TIMEOUT)" IMAGE_MODE="$(IMAGE_MODE)" TELEMETRY_LOG="$(TELEMETRY_LOG)" ./scripts/run_drone_voice_demo_mac.sh
 
 run-edge-brain:
 	CONNECTION="$(CONNECTION)" HOST="$(HOST)" PORT="$(PORT)" TELEMETRY_LOG="$(TELEMETRY_LOG)" ./scripts/run_jetson_cognition_server.sh
@@ -79,6 +87,9 @@ charts-local:
 	$(MAC_PYTHON) scripts/generate_charts.py \
 		--input logs/performance.csv \
 		--output-dir docs/imgs
+
+reset-demo-logs:
+	./scripts/reset_demo_logs.sh
 
 sync-jetson:
 	./scripts/sync_jetson_demo_files.sh

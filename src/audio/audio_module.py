@@ -59,7 +59,7 @@ class AudioModule:
             import sounddevice as sounddevice
             from faster_whisper import WhisperModel
         except ImportError as exc:
-            raise RuntimeError("Missing audio dependencies. Install requirements.txt") from exc
+            raise RuntimeError("Missing audio dependencies. Install requirements-mac-sensor.txt") from exc
 
         self._sounddevice = sounddevice
         self._whisper_cls = WhisperModel

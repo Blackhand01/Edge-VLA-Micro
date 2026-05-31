@@ -199,8 +199,8 @@ def print_markdown_report(rows: list[dict[str, float]], means: dict[str, float])
     print(f"- Mean decode throughput: {avg_tps:.1f} TPS")
     print(f"- ASR + TTFT bottleneck share: {asr_ttft_pct:.1f}%")
     print("\nGenerated artifacts:")
-    print("- `docs/latency_pie_chart.png`")
-    print("- `docs/tps_bar_chart.png`")
+    print("- `latency_pie_chart.png` in the selected output directory")
+    print("- `tps_bar_chart.png` in the selected output directory")
 
 
 def main() -> int:

@@ -2,7 +2,9 @@
 
 ## Executive Summary & Scope
 
-Edge-VLA-Micro is a distributed Vision-Language-Action stack for PX4 autonomy experiments. It converts operator speech and optional camera evidence into validated MAVSDK commands. The project is designed for SITL/HITL development without requiring a physical drone during integration.
+Edge-VLA-Micro is a distributed Vision-Language-Action stack for PX4 autonomy experiments. It converts operator speech and optional camera evidence into validated MAVSDK commands through a Low-latency Voice-to-Action command loop. The project is designed for SITL/HITL development without requiring a physical drone during integration.
+
+The engineering scope is Benchmarking and adapting VLMs for edge compute constraints (SWaP), then Bridging edge AI hardware (NVIDIA Jetson) with flight stacks (PX4/MAVLink). The Mac profile runs a research-class Qwen2-VL MLX backend for local spatial-reasoning validation; the Jetson profile runs a smaller SmolVLM CUDA backend to preserve bare-metal stability inside the Orin Nano 8GB Unified Memory Architecture budget.
 
 The core system boundary is explicit:
 
@@ -14,6 +16,8 @@ The VLM is not a control authority. Its output is treated as an untrusted propos
 
 ![Edge-VLA demo flow](docs/imgs/demo-flow.svg)
 
+Reference demo recording: [Open `vla-demo.mov`](docs/imgs/vla-demo.mov).
+
 ## Deployment Profiles
 
 ### Profile 1: Local Prototyping on Mac
@@ -22,7 +26,7 @@ The Mac-only profile runs the full stack on Apple Silicon:
 
 - microphone capture and local ASR;
 - OpenCV camera capture;
-- MLX/MLX-VLM inference;
+- MLX/MLX-VLM inference with Qwen2-VL;
 - Pydantic validation and visual guardrails;
 - MAVSDK command dispatch to PX4 SITL.
 
@@ -39,6 +43,18 @@ Equivalent direct launcher:
 ```
 
 This profile is not a Jetson capacity measurement. It uses Apple Silicon memory, MLX runtime behavior, and macOS camera/audio APIs.
+
+Default research-class local VLM:
+
+```text
+mlx-community/Qwen2-VL-2B-Instruct-4bit
+```
+
+Override example:
+
+```bash
+COGNITION_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit make run-local
+```
 
 ### Profile 2: Distributed Edge
 
@@ -106,7 +122,13 @@ mavlink stop -u 14580
 mavlink start -x -u 14580 -r 4000000 -m onboard -o 14540 -t 192.168.55.1
 ```
 
-![Topologia MAVLink Mac/Jetson](docs/imgs/mavlink-mac-jetson-topology.svg)
+![Mac/Jetson MAVLink topology](docs/imgs/mavlink-mac-jetson-topology.svg)
+
+The distributed profile is the primary edge architecture. It keeps camera and speech acquisition close to the operator while reserving Jetson UMA for SmolVLM, MAVSDK, PX4 telemetry, and monitoring.
+
+This split is intentional: the Mac can execute larger VLMs such as Qwen for local validation, while the Jetson executes strongly constrained models such as SmolVLM to guarantee deployment without exceeding the 8GB UMA budget.
+
+![Distributed QGroundControl run](docs/imgs/qgroundcontrol.png)
 
 ## Design Rationale
 
@@ -131,9 +153,9 @@ Do not use CPU/GPU offload folders.
 Do not use FSDP, DeepSpeed, or distributed inference paths on Jetson.
 ```
 
-`Qwen/Qwen2-VL-2B-Instruct` in FP16 was tested as a capacity boundary and produced CUDA allocation failures consistent with physical UMA exhaustion (`NvMapMemAlloc ... error 12`). The AWQ variant reduced model weight size but failed on the available aarch64 stack with AutoAWQ runtime/kernel issues. SmolVLM was selected as the stable baseline because it fits the Jetson budget, runs on single-device CUDA, and leaves headroom for control and observability services.
+`Qwen/Qwen2-VL-2B-Instruct` in FP16 was tested as a capacity boundary and produced CUDA allocation failures consistent with physical UMA exhaustion (`NvMapMemAlloc ... error 12`). The AWQ variant reduced model weight size but failed on the available aarch64 stack with AutoAWQ runtime/kernel issues. SmolVLM was selected as the stable Jetson baseline because it fits the Jetson budget, runs on single-device CUDA, and leaves headroom for control and observability services. Qwen remains the Mac-side reference backend for local logic validation and VLM benchmark comparison.
 
-![Decisione runtime VLM su Jetson](docs/imgs/vlm-runtime-decision.svg)
+![Jetson VLM runtime decision](docs/imgs/vlm-runtime-decision.svg)
 
 ### Safety and State Transitions
 
@@ -157,7 +179,7 @@ red target absent -> hold / target_found=false
 
 For visual commands, OpenCV target guardrails validate the image before motion. The red target detector combines HSV thresholding with RGB dominance to reduce false positives on skin, lips, and warm lighting.
 
-![Red target debug overlay](docs/imgs/red-target-debug-overlay.svg)
+![Red target debug overlay](docs/imgs/red_object_detected.png)
 
 ## Modularity and Runtime Pattern
 
@@ -231,7 +253,7 @@ flowchart LR
         ASR["ASR<br/>MLX Whisper / faster-whisper"]
         Cam["Camera"]
         Client["HTTP Sensor Client<br/>src.tools.mac_sensor_client"]
-        MacLog["logs/telemetry.csv<br/>ASR / vision / HTTP"]
+        MacLog["Event telemetry<br/>ASR / vision / HTTP"]
     end
 
     subgraph Jetson["Jetson Orin Nano VLA Core"]
@@ -240,8 +262,8 @@ flowchart LR
         Guard["OpenCV HSV/RGB<br/>visual guardrail"]
         Validator["Pydantic<br/>CommandValidator"]
         Controller["MAVSDK<br/>DroneController"]
-        JetsonLog["logs/telemetry.csv<br/>VLM / validation / action"]
-        Tegra["tegrastats<br/>logs/jetson_telemetry.csv"]
+        JetsonLog["Event telemetry<br/>VLM / validation / action"]
+        Tegra["tegrastats<br/>hardware telemetry"]
     end
 
     subgraph PX4["PX4 SITL / HITL"]
@@ -269,14 +291,14 @@ flowchart LR
 
 ## Telemetry and Reporting
 
-The repository records data at three levels:
+The repository records runtime data at three levels:
 
-| File | Producer | Purpose |
+| Data stream | Producer | Purpose |
 | --- | --- | --- |
-| `logs/telemetry.csv` | local loop, Mac sensor, Jetson server | cross-profile event timing |
-| `logs/performance.csv` | local Mac profile | legacy latency charts |
-| `logs/jetson_telemetry.csv` | `tegrastats` monitor | RAM, swap, CPU, GPU, EMC, temperature, throttle suspicion |
-| `logs/jetson_telemetry_summary.json` | chart generator | min/max/mean hardware summary |
+| Event timing | local loop, Mac sensor, Jetson server | cross-profile ASR, HTTP, cognition, validation, and action timing |
+| Local profile metrics | Mac-only profile | latency and VLM throughput charts |
+| Jetson hardware telemetry | `tegrastats` monitor | RAM, swap, CPU, GPU, EMC, temperature, throttle suspicion |
+| Aggregated summaries | chart generator | min/max/mean hardware summary |
 
 Generate local and Jetson charts:
 
@@ -296,12 +318,37 @@ Existing visual reporting assets:
 
 ![VLM decode throughput per inference run](docs/imgs/tps_bar_chart.png)
 
-Generated Jetson monitoring artifacts:
+Latest clean distributed telemetry sample:
 
-```text
-docs/imgs/jetson_memory_timeseries.png
-docs/imgs/jetson_compute_thermal_timeseries.png
-```
+| Metric | Mean | Max | Interpretation |
+| --- | ---: | ---: | --- |
+| RAM used | 2873 MB | 3513 MB | SmolVLM fits within the 8GB UMA budget with headroom |
+| Swap used | 0 MB | 0 MB | no memory pressure spillover |
+| GPU load | 5.53% | 99% | CUDA path is active during visual VLM inference |
+| CPU load | 6.47% | 35.17% | control/API overhead is low |
+| Max temperature | 49.88 C | 50.66 C | no thermal throttling observed |
+| Throttle samples | 0 | 0 | hardware remained thermally stable |
+
+![Jetson memory time series](docs/imgs/jetson_memory_timeseries.png)
+
+![Jetson compute and thermal time series](docs/imgs/jetson_compute_thermal_timeseries.png)
+
+Empirical interpretation:
+
+- The Mac Sensor -> Jetson Brain -> MAVSDK/PX4 pipeline remained stable for the clean SITL/HITL run.
+- Hardware stability was not the limiting factor: peak RAM was about 3.5GB out of 7.6GB, swap stayed at 0MB, and maximum temperatures stayed below 51 C.
+- GPU utilization reached an exact 99% peak during visual inference, confirming that the SmolVLM path exercised Jetson CUDA cores rather than falling back to CPU-only execution.
+- The identified bottleneck is software latency: ASR on the Mac was approximately 10s per spoken command, while Jetson visual VLM inference was approximately 11-17s for red-object commands.
+
+Latest clean distributed action timing:
+
+| Input | Action | Image used | Server-side total |
+| --- | --- | --- | ---: |
+| `Arm the drone.` | `arm` | no | 1.05 s |
+| `Take off!` | `takeoff` | no | 1.72 s |
+| `Move toward the red object.` | `move_velocity` | yes | 17.52 s |
+| `Move toward the red object.` | `move_velocity` | yes | 11.81 s |
+| `Move 1 meter per second.` | `move_velocity` | no | 3.4 ms |
 
 Interpretation guide:
 
@@ -312,38 +359,3 @@ Interpretation guide:
 | high VLM TTFT with high GPU load | VLM compute-bound | evaluate TensorRT/LLM or smaller preprocessing |
 | high EMC | memory bandwidth pressure | reduce image copies, resolution, or concurrent services |
 | fast cognition but slow action | MAVSDK/PX4/link issue | check MAVLink route, QGroundControl, PX4 state |
-
-## Supported Commands
-
-```text
-Arm the drone.
-Take off.
-Hold position.
-Land.
-Disarm the drone.
-Move forward.
-Move backward.
-Move left.
-Move right.
-Move forward one meter per second.
-Move one meter per second.
-Move toward the red object.
-Move toward the blue object.
-Follow the red object.
-Approach the red object.
-Stop.
-Hover.
-Stay.
-```
-
-Recommended full-cycle SITL sequence:
-
-```text
-Arm the drone.
-Take off.
-Move toward the red object.
-Move one meter per second.
-Move left.
-Hold position.
-Land.
-```
