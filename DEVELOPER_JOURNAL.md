@@ -1,6 +1,6 @@
 # Edge-VLA-Micro Developer Journal
 
-This document consolidates the hardware setup guide and the chronological software problem log for the Mac + Jetson edge deployment path.
+This journal preserves hardware bring-up notes and the chronological engineering problem log for the Mac + Jetson edge deployment path. It intentionally excludes live demo runbooks, latest benchmark summaries, and architecture diagrams; those belong in [COMMANDS.md](COMMANDS.md), [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Section 1: Hardware Setup Guide
 
@@ -10,30 +10,15 @@ This document consolidates the hardware setup guide and the chronological softwa
 | --- | --- | --- |
 | Target | NVIDIA Jetson Orin Nano Developer Kit 8GB, JetPack 6.x, NVMe | VLA/control runtime |
 | Temporary host | x86_64 PC with native Ubuntu 22.04 | JetPack flashing through NVIDIA SDK Manager |
-| Development client | Apple Silicon Mac | SSH development, ASR/camera sensor node, PX4 SITL |
-
-![Jetson Orin Nano Developer Kit](docs/imgs/jetson-orin-nano.jpeg)
+| Development client | Apple Silicon Mac | SSH development and sensor-node development |
 
 ![Temporary Ubuntu host assembled for Jetson flashing](docs/imgs/mac-pc_assembled-jetson.jpg)
-
-![Jetson Orin Nano hardware map and lower M.2 slot](docs/imgs/jetson-orin-nano-memory-map.png)
-
-![NVMe storage used for Jetson runtime](docs/imgs/NVMe.jpeg)
 
 ### Why a Temporary Linux Host Is Required
 
 NVIDIA SDK Manager is not compatible with macOS. Flashing JetPack and the bootloader requires a native Linux host with reliable USB passthrough. Virtual machines and WSL are not recommended for this step because USB recovery-mode enumeration and low-level flashing can fail.
 
 The temporary Ubuntu host is only needed for flashing. After JetPack is installed on the Jetson NVMe drive, normal development happens from the Mac over SSH.
-
-The development split after flashing is:
-
-| Device | Responsibility |
-| --- | --- |
-| Mac | source editing, voice/camera sensor node, PX4 SITL, QGroundControl |
-| Jetson | CUDA VLM runtime, FastAPI bridge, MAVSDK command execution, hardware telemetry |
-
-![Current Mac/Jetson pipeline](docs/imgs/jetson-current-pipeline.svg)
 
 ### Connection Diagram
 
@@ -68,9 +53,11 @@ sudo apt update && sudo apt upgrade -y
 sudo apt autoremove -y
 ```
 
+![NVMe storage used for Jetson runtime](docs/imgs/NVMe.jpeg)
+
 ### Install NVIDIA SDK Manager
 
-Original setup link preserved: [NVIDIA Developer SDK Manager](https://www.google.com/search?q=https://developer.nvidia.com/embedded/sdk-manager).
+Download NVIDIA SDK Manager from [NVIDIA Developer SDK Manager](https://developer.nvidia.com/sdk-manager).
 
 On the Ubuntu host:
 
@@ -319,8 +306,6 @@ CUDACachingAllocator.cpp:838
 
 Conclusion: Qwen2-VL-2B FP16 exceeds the practical 8GB UMA budget once the OS, Python runtime, CUDA context, model, image processing, and control services are considered.
 
-![Jetson UMA/runtime decision](docs/imgs/vlm-runtime-decision.svg)
-
 Engineering decision:
 
 ```text
@@ -388,23 +373,3 @@ peak_cuda_allocated_gb: 0.60
 ```
 
 Decision: SmolVLM-256M is the first real VLM baseline for Jetson. It runs single-device CUDA without offload and leaves memory headroom for the OS, OpenCV, FastAPI, MAVSDK, and telemetry.
-
-### 7. Distributed Demo Telemetry Accepted
-
-A clean distributed demo run was recorded after archiving previous logs. The run produced:
-
-| Evidence | Result |
-| --- | --- |
-| Accepted commands | 5 |
-| Jetson monitor samples | 176 |
-| Peak RAM | 3513 MB / 7607 MB |
-| Peak GPU | 99% |
-| Peak temperature | 50.656 C |
-| Swap usage | 0 MB |
-| Thermal throttling suspicion | 0 samples |
-
-![Jetson memory profile during clean demo](docs/imgs/jetson_memory_timeseries.png)
-
-![Jetson compute and thermal profile during clean demo](docs/imgs/jetson_compute_thermal_timeseries.png)
-
-The hardware result is stable: the observed bottleneck is VLM/ASR latency, not thermal throttling or memory exhaustion.
