@@ -14,6 +14,7 @@ This journal preserves hardware bring-up notes and the chronological engineering
 
 ![Temporary Ubuntu host assembled for Jetson flashing](docs/imgs/mac-pc_assembled-jetson.jpg)
 
+
 ### Why a Temporary Linux Host Is Required
 
 NVIDIA SDK Manager is not compatible with macOS. Flashing JetPack and the bootloader requires a native Linux host with reliable USB passthrough. Virtual machines and WSL are not recommended for this step because USB recovery-mode enumeration and low-level flashing can fail.
@@ -54,6 +55,7 @@ sudo apt autoremove -y
 ```
 
 ![NVMe storage used for Jetson runtime](docs/imgs/NVMe.jpeg)
+
 
 ### Install NVIDIA SDK Manager
 
