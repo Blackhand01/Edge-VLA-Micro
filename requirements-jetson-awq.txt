@@ -1,3 +1,0 @@
-# Install inside .venv-jetson with --no-deps after requirements-jetson-awq-deps.txt.
-# This prevents pip from replacing the NVIDIA Jetson PyTorch wheel.
-autoawq>=0.2.7,<0.3

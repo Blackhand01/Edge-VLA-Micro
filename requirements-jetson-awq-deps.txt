@@ -1,8 +1,0 @@
-# Install normally before autoawq.
-# This file intentionally does not declare torch.
-numpy==1.24.4
-opencv-python-headless==4.10.0.84
-tokenizers>=0.21,<0.22
-transformers==4.51.3
-datasets>=2.20,<3
-zstandard>=0.22,<1
