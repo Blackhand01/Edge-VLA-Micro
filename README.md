@@ -6,7 +6,7 @@ Voice -> VLM -> Safety Layer -> PX4
 
 Built for edge robotics under an 8GB memory budget.
 
-[Demo Video](docs/imgs/vla-demo.mov) | [Latency Profiler](docs/index.html) | [Architecture](ARCHITECTURE.md) | [Commands](commands.md)
+[Demo Video](docs/imgs/vla-demo.mov) | [Latency Profiler](docs/index.html) | [Architecture](ARCHITECTURE.md) | [Commands](COMMANDS.md)
 
 ![Edge-VLA Action Demo](docs/imgs/action_demo.gif)
 
@@ -80,14 +80,18 @@ Latest clean measured distributed run:
 | `Move toward the red object.` | visual `move_velocity` | 11.81 s |
 | `Move 1 meter per second.` | `move_velocity` fast path | 3.4 ms |
 
+![Mac + Jetson latency breakdown](docs/imgs/edge_latency_pie_chart.png)
+
+![Jetson SmolVLM visual throughput](docs/imgs/edge_tps_bar_chart.png)
+
 ![Red target debug overlay](docs/imgs/red_object_detected.png)
 
 ## Operations
 
-All setup, demo, SITL, Jetson, monitoring, and reporting commands are centralized in [commands.md](commands.md).
+All setup, demo, SITL, Jetson, monitoring, and reporting commands are centralized in [COMMANDS.md](COMMANDS.md).
 
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): system design, deployment profiles, data flow, model selection rationale, telemetry interpretation.
 - [DEVELOPER_JOURNAL.md](DEVELOPER_JOURNAL.md): Jetson hardware setup, flashing guide, and chronological engineering problem log.
-- [commands.md](commands.md): centralized operational runbook for live demos, SITL routing, monitoring, and supported commands.
+- [COMMANDS.md](COMMANDS.md): centralized operational runbook for live demos, SITL routing, monitoring, and supported commands.
