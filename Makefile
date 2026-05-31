@@ -21,7 +21,7 @@ COGNITION_MODEL ?= mlx-community/Qwen2-VL-2B-Instruct-4bit
 TELEMETRY_LOG ?= logs/telemetry.csv
 JETSON_MONITOR_OUTPUT ?= logs/jetson_telemetry.csv
 
-.PHONY: help setup-mac setup-jetson run-local run-edge-sensor run-edge-brain run-sitl run-qgc monitor-jetson pull-jetson-logs charts-jetson charts-local reset-demo-logs sync-jetson test
+.PHONY: help setup-mac setup-jetson run-local run-edge-sensor run-edge-brain run-sitl run-qgc monitor-jetson pull-jetson-logs charts-jetson charts-edge charts-local reset-demo-logs sync-jetson test
 
 help:
 	@echo "Edge-VLA-Micro targets"
@@ -41,6 +41,7 @@ help:
 	@echo "  make monitor-jetson     Record tegrastats to $(JETSON_MONITOR_OUTPUT)"
 	@echo "  make pull-jetson-logs   Copy Jetson logs into local ./logs"
 	@echo "  make charts-jetson      Generate Jetson telemetry summary and charts"
+	@echo "  make charts-edge        Generate Mac + Jetson demo latency and TPS charts"
 	@echo "  make charts-local       Generate local latency charts from logs/performance.csv"
 	@echo "  make reset-demo-logs    Archive local and Jetson logs before a clean demo run"
 	@echo "  make sync-jetson        Rsync demo/server files to the Jetson"
@@ -81,6 +82,11 @@ charts-jetson:
 	$(MAC_PYTHON) scripts/generate_jetson_monitor_charts.py \
 		--input logs/jetson_telemetry.csv \
 		--summary-output logs/jetson_telemetry_summary.json \
+		--output-dir docs/imgs
+
+charts-edge:
+	$(MAC_PYTHON) scripts/generate_edge_demo_charts.py \
+		--input logs/telemetry.csv \
 		--output-dir docs/imgs
 
 charts-local:

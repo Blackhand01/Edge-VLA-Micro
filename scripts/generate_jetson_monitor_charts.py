@@ -136,6 +136,8 @@ def draw_line_chart(
     subtitle: str,
     series: list[tuple[str, str, str]],
     y_label: str,
+    y_min_override: float | None = None,
+    y_max_override: float | None = None,
 ) -> None:
     image = Image.new("RGB", (1800, 1040), BACKGROUND)
     draw = ImageDraw.Draw(image)
@@ -149,8 +151,8 @@ def draw_line_chart(
     if not all_values:
         raise ValueError(f"No finite values for chart: {title}")
 
-    y_min = min(0.0, min(all_values))
-    y_max = max(all_values) * 1.12
+    y_min = min(0.0, min(all_values)) if y_min_override is None else y_min_override
+    y_max = max(all_values) * 1.12 if y_max_override is None else y_max_override
     if y_max <= y_min:
         y_max = y_min + 1.0
 
@@ -241,6 +243,8 @@ def main() -> int:
             ("max_temp_c", "Max temp C", TEMP),
         ],
         y_label="% / C",
+        y_min_override=0.0,
+        y_max_override=100.0,
     )
     print_report(summary, output_dir, summary_path)
     return 0
