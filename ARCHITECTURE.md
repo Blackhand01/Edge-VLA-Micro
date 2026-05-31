@@ -144,6 +144,8 @@ The HTTP bridge keeps ASR and camera acquisition on the Mac while keeping VLA in
 
 The Jetson Orin Nano 8GB uses Unified Memory Architecture. CPU and GPU share the same physical LPDDR5 pool. CPU/GPU offload does not create more memory; it only moves pressure inside the same budget and can increase latency.
 
+![Jetson Orin Nano hardware map and lower M.2 slot](docs/imgs/jetson-orin-nano-memory-map.png)
+
 Operational rules:
 
 ```text
@@ -300,62 +302,13 @@ The repository records runtime data at three levels:
 | Jetson hardware telemetry | `tegrastats` monitor | RAM, swap, CPU, GPU, EMC, temperature, throttle suspicion |
 | Aggregated summaries | chart generator | min/max/mean hardware summary |
 
-Generate local and Jetson charts:
+Generate local, distributed edge, and Jetson charts:
 
 ```bash
 make charts-local
 make pull-jetson-logs
+make charts-edge
 make charts-jetson
 ```
 
-Existing visual reporting assets:
-
-<a href="https://blackhand01.github.io/Edge-VLA-Micro/" target="_blank" rel="noopener noreferrer">
-  <img src="docs/imgs/LatencyProfiler.png" alt="Interactive latency profiler">
-</a>
-
-![Average control-loop latency breakdown](docs/imgs/latency_pie_chart.png)
-
-![VLM decode throughput per inference run](docs/imgs/tps_bar_chart.png)
-
-Latest clean distributed telemetry sample:
-
-| Metric | Mean | Max | Interpretation |
-| --- | ---: | ---: | --- |
-| RAM used | 2873 MB | 3513 MB | SmolVLM fits within the 8GB UMA budget with headroom |
-| Swap used | 0 MB | 0 MB | no memory pressure spillover |
-| GPU load | 5.53% | 99% | CUDA path is active during visual VLM inference |
-| CPU load | 6.47% | 35.17% | control/API overhead is low |
-| Max temperature | 49.88 C | 50.66 C | no thermal throttling observed |
-| Throttle samples | 0 | 0 | hardware remained thermally stable |
-
-![Jetson memory time series](docs/imgs/jetson_memory_timeseries.png)
-
-![Jetson compute and thermal time series](docs/imgs/jetson_compute_thermal_timeseries.png)
-
-Empirical interpretation:
-
-- The Mac Sensor -> Jetson Brain -> MAVSDK/PX4 pipeline remained stable for the clean SITL/HITL run.
-- Hardware stability was not the limiting factor: peak RAM was about 3.5GB out of 7.6GB, swap stayed at 0MB, and maximum temperatures stayed below 51 C.
-- GPU utilization reached an exact 99% peak during visual inference, confirming that the SmolVLM path exercised Jetson CUDA cores rather than falling back to CPU-only execution.
-- The identified bottleneck is software latency: ASR on the Mac was approximately 10s per spoken command, while Jetson visual VLM inference was approximately 11-17s for red-object commands.
-
-Latest clean distributed action timing:
-
-| Input | Action | Image used | Server-side total |
-| --- | --- | --- | ---: |
-| `Arm the drone.` | `arm` | no | 1.05 s |
-| `Take off!` | `takeoff` | no | 1.72 s |
-| `Move toward the red object.` | `move_velocity` | yes | 17.52 s |
-| `Move toward the red object.` | `move_velocity` | yes | 11.81 s |
-| `Move 1 meter per second.` | `move_velocity` | no | 3.4 ms |
-
-Interpretation guide:
-
-| Symptom | Likely bottleneck | Action |
-| --- | --- | --- |
-| `swap_used_mb` grows | model/runtime exceeds useful physical memory | reduce model, image size, token budget, or background processes |
-| high `max_temp_c` | possible thermal throttling | improve cooling, reduce load, check power mode |
-| high VLM TTFT with high GPU load | VLM compute-bound | evaluate TensorRT/LLM or smaller preprocessing |
-| high EMC | memory bandwidth pressure | reduce image copies, resolution, or concurrent services |
-| fast cognition but slow action | MAVSDK/PX4/link issue | check MAVLink route, QGroundControl, PX4 state |
+Measured latency results, generated chart assets, and benchmark interpretation are reported in [README.md](README.md). This document keeps the telemetry section focused on data sources and system instrumentation.
