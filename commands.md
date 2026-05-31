@@ -176,6 +176,7 @@ cd /Users/stefanoroybisignano/Desktop/Edge-VLA-Micro
 source /tmp/edge-vla-demo-venv/bin/activate
 
 make pull-jetson-logs
+make charts-edge
 make charts-jetson
 ```
 
