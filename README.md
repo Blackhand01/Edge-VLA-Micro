@@ -62,7 +62,7 @@ The Mac profile can run larger Qwen2-VL MLX models for local spatial-reasoning v
 
 The project includes an interactive technical profiler for comparing autonomy pipeline configurations:
 
-[Open the Edge-VLA Autonomy Latency Profiler](docs/index.html)
+[Open the Edge-VLA Autonomy Latency Profiler](https://blackhand01.github.io/Edge-VLA-Micro/)
 
 ![Latency profiler](docs/imgs/LatencyProfiler.png)
 
