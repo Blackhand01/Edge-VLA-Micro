@@ -8,7 +8,7 @@ The engineering scope is Benchmarking and adapting VLMs for edge compute constra
 
 The core system boundary is explicit:
 
-- Perception proposes intent: ASR, camera capture, VLM inference, JSON extraction.
+- Perception proposes intent: ASR, optional camera capture, deterministic intent routing, VLM inference when needed, JSON extraction.
 - Safety authorizes or rejects: Pydantic schemas, `CommandValidator`, OpenCV visual guardrails, PX4 state rules.
 - Control executes only validated actions: MAVSDK arm, takeoff, hold, land, and velocity commands.
 
@@ -140,20 +140,24 @@ The HTTP bridge keeps ASR and camera acquisition on the Mac while keeping VLA in
 - the Mac can use Apple-native ASR acceleration and stable camera access;
 - the network boundary provides clean timing metrics for ASR, vision capture, HTTP round trip, VLM inference, safety validation, and action dispatch.
 
+### ASR and Intent Routing Boundary
+
+ASR is not a command authority. MLX Whisper or faster-whisper converts microphone audio into transcript text, and the downstream Jetson server treats that transcript as operator evidence. The current ASR path pins the language to English but does not pass a domain prompt or `initial_prompt` to Whisper. Transcript cleanup is intentionally shallow: whitespace normalization plus rejection of obvious repetitive hallucinations.
+
+The Mac sensor node performs only capture routing, not final intent authorization. In the default `IMAGE_MODE=auto` profile it sends a camera frame only when the transcript contains visual-grounding tokens such as `object`, `red`, `target`, `toward`, `towards`, `follow`, or `approach`. Otherwise it sends text only. This is a latency optimization; authoritative command selection still happens on the Jetson.
+
+Captured frames are square JPEGs resized before transmission. The default Mac client setting is `--image-size 384`, so the normal bridge payload contains a 384 x 384 JPEG when an image is present. The JPEG payload is small compared with VLM inference latency, but one-shot camera open/warmup/capture and visual inference are measurable costs, so images are not attached to every request by default.
+
+On the Jetson, `POST /process_intent` first tries a deterministic explicit-command parser before invoking SmolVLM. This parser uses exact command words and short phrase patterns for `arm`, `disarm`, `takeoff`, `land`, `hold`, and simple velocity movement. If it finds a safe text-only command, the server validates and dispatches it without VLM inference. For visual or ambiguous requests, the request falls through to `CognitionEngine`, where SmolVLM, schema repair, visual guardrails, and `CommandValidator` run before any MAVSDK action is sent.
+
+This routing is intentionally conservative for critical commands. A model-generated critical command is not allowed to become control output unless there is explicit operator evidence in the transcript and the deterministic safety checks pass.
+
 ### Jetson UMA Constraint
 
 The Jetson Orin Nano 8GB uses Unified Memory Architecture. CPU and GPU share the same physical LPDDR5 pool. CPU/GPU offload does not create more memory; it only moves pressure inside the same budget and can increase latency.
 
 ![Jetson Orin Nano hardware map and lower M.2 slot](docs/imgs/jetson-orin-nano-memory-map.png)
 
-Operational rules:
-
-```text
-Do not use device_map="auto" on Jetson.
-Do not use artificial max_memory partitioning.
-Do not use CPU/GPU offload folders.
-Do not use FSDP, DeepSpeed, or distributed inference paths on Jetson.
-```
 
 `Qwen/Qwen2-VL-2B-Instruct` in FP16 was tested as a capacity boundary and produced CUDA allocation failures consistent with physical UMA exhaustion (`NvMapMemAlloc ... error 12`). The AWQ variant reduced model weight size but failed on the available aarch64 stack with AutoAWQ runtime/kernel issues. SmolVLM was selected as the stable Jetson baseline because it fits the Jetson budget, runs on single-device CUDA, and leaves headroom for control and observability services. Qwen remains the Mac-side reference backend for local logic validation and VLM benchmark comparison.
 
@@ -182,6 +186,16 @@ red target absent -> hold / target_found=false
 For visual commands, OpenCV target guardrails validate the image before motion. The red target detector combines HSV thresholding with RGB dominance to reduce false positives on skin, lips, and warm lighting.
 
 ![Red target debug overlay](docs/imgs/red_object_detected.png)
+
+### MAVSDK, MAVLink, PX4, and QGroundControl Boundary
+
+Validated commands reach the vehicle only through `DroneController`, which wraps MAVSDK-Python. MAVSDK exposes high-level APIs such as `action.arm()`, `action.takeoff()`, `action.land()`, `action.hold()`, and `offboard.set_velocity_ned(...)`; it is not the wire protocol itself.
+
+MAVLink is the underlying telemetry and command protocol between the Jetson companion computer and PX4. In the distributed profile, PX4 routes an onboard MAVLink UDP stream to the Jetson on port 14540, and the Jetson connects with `udpin://0.0.0.0:14540`.
+
+PX4 remains the flight-stack authority. It owns arming state, health, flight mode, failsafes, and the real vehicle or SITL dynamics. The project safety layer rejects unsafe proposals before they reach PX4, while PX4 still enforces its own preflight, mode, and failsafe rules after receiving MAVLink commands.
+
+QGroundControl is the ground-control station and observability surface. It is useful for monitoring arming state, mode changes, telemetry, takeoff, landing, and OFFBOARD behavior during SITL/HITL runs, but it is not the Jetson control loop.
 
 ## Modularity and Runtime Pattern
 
@@ -260,6 +274,7 @@ flowchart LR
 
     subgraph Jetson["Jetson Orin Nano VLA Core"]
         API["FastAPI<br/>POST /process_intent"]
+        Router["Intent Router<br/>text fast path / VLM routing"]
         VLM["SmolVLM CUDA<br/>generate_profiled"]
         Guard["OpenCV HSV/RGB<br/>visual guardrail"]
         Validator["Pydantic<br/>CommandValidator"]
@@ -279,7 +294,9 @@ flowchart LR
     ASR --> Client
     Client -->|JSON + optional JPEG| API
     Client --> MacLog
-    API --> VLM
+    API --> Router
+    Router -->|visual or ambiguous| VLM
+    Router -->|explicit text command| Validator
     VLM --> Guard
     Guard --> Validator
     Validator --> Controller

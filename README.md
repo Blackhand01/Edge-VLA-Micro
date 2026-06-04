@@ -2,7 +2,7 @@
 
 Distributed Vision-Language-Action stack for PX4 drones running on Jetson Orin Nano.
 
-Voice -> VLM -> Safety Layer -> PX4
+Voice -> ASR -> Intent Router / VLM -> Safety Layer -> MAVSDK/PX4
 
 Built for edge robotics under an 8GB memory budget.
 
@@ -28,8 +28,8 @@ Most Vision-Language-Action systems require cloud inference or workstation-class
 | Peak temperature | 50.66 C |
 | Thermal throttling | 0 suspected samples |
 | Voice-to-Action | demonstrated |
-| PX4 Integration | MAVSDK |
-| Safety Layer | Pydantic + CV + State Machine |
+| PX4 Integration | MAVSDK over MAVLink |
+| Safety Layer | Pydantic + OpenCV guardrails + PX4 state rules |
 
 ![Jetson memory telemetry](docs/imgs/jetson_memory_timeseries.png)
 
@@ -38,6 +38,10 @@ Most Vision-Language-Action systems require cloud inference or workstation-class
 ## The Core Rule
 
 The VLM is not a control authority. Perception proposes intent -> Safety authorizes -> Control executes.
+
+In the distributed profile, the Mac is a smart sensor node: it runs ASR and sends text plus an optional camera frame. It does not authorize flight commands. The Jetson owns intent routing, SmolVLM inference when needed, deterministic safety validation, and MAVSDK dispatch. PX4 remains the final flight-stack authority.
+
+Camera frames are not attached to every request by default. In `IMAGE_MODE=auto`, the Mac sends a 384 x 384 JPEG only for visual-grounding transcripts such as red/object/target/toward/follow/approach requests. Simple commands can take the Jetson text fast path without VLM inference.
 
 ## Optimization Strategy
 
